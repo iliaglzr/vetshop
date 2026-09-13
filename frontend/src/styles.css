@@ -345,14 +345,15 @@ textarea {
 }
 
 .cart-item {
-  background: #fff;
-  border: 1px solid #e4ebe7;
+  background: var(--scondaryaccent);
+  border: 1px solid var(--primary);
   border-radius: 14px;
   padding: 18px;
   margin-bottom: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 4px 2px 0 var(--font_color), 0 6px 5px 0 var(--dark);
 }
 
 .cart-item small {
