@@ -16,6 +16,8 @@ Route::get('/orders',[OrderController::class,'index']);
 Route::get('/orders/{order}',[OrderController::class,'show']); 
 Route::post('/orders/{order}/payment',[OrderController::class,'uploadPayment']);
 Route::middleware('role:super_admin,admin,operator')->prefix('admin')->group(function(){Route::get('/dashboard',[AdminController::class,'dashboard']); 
+Route::get('/users', [AdminController::class, 'users']);
+Route::get('/products-list', [AdminController::class, 'products']);
 Route::apiResource('/products',ProductController::class); Route::get('/orders',[AdminController::class,'orders']); 
 Route::patch('/orders/{order}',[AdminController::class,'updateOrder']); Route::get('/payments/pending',[AdminController::class,'pendingPayments']); Route::post('/payments/{payment}/approve',[AdminController::class,'approvePayment']); Route::post('/payments/{payment}/reject',[AdminController::class,'rejectPayment']); Route::post('/inventory/{product}',[AdminController::class,'adjustInventory']);});
 });

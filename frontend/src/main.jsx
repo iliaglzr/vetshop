@@ -692,75 +692,1546 @@ function Dashboard() {
   );
 }
 function Admin() {
-  const [d, setD] = useState(null),
-    [payments, setPayments] = useState([]),
-    [products, setProducts] = useState([]);
+  const [d, setD] = useState(null);
+
+  // =========================
+  // Payments
+  // =========================
+  const [payments, setPayments] = useState([]);
+
+  // =========================
+  // Users
+  // =========================
+  const [users, setUsers] = useState([]);
+  const [showUsers, setShowUsers] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersMeta, setUsersMeta] = useState(null);
+
+  // =========================
+  // Orders
+  // =========================
+  const [orders, setOrders] = useState([]);
+  const [showOrders, setShowOrders] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersMeta, setOrdersMeta] = useState(null);
+
+  // =========================
+  // Products
+  // =========================
+  const [products, setProducts] = useState([]);
+  const [showProducts, setShowProducts] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsMeta, setProductsMeta] = useState(null);
+
+  // =========================
+  // Load dashboard
+  // =========================
   async function load() {
-    setD((await api.get("/admin/dashboard")).data);
-    setPayments((await api.get("/admin/payments/pending")).data.data || []);
-    setProducts((await api.get("/products")).data.data || []);
+    try {
+      const [dashboardRes, paymentsRes] = await Promise.all([
+        api.get("/admin/dashboard"),
+        api.get("/admin/payments/pending"),
+      ]);
+
+      setD(dashboardRes.data);
+      setPayments(paymentsRes.data.data || []);
+    } catch (e) {
+      console.error(e);
+
+      alert(
+        e.response?.data?.message ||
+          "خطا در دریافت اطلاعات پنل مدیریت"
+      );
+    }
   }
+
+  // =========================
+  // Load users
+  // =========================
+  async function loadUsers(page = 1) {
+    setUsersLoading(true);
+
+    try {
+      const r = await api.get("/admin/users", {
+        params: {
+          page,
+        },
+      });
+
+      setUsers(r.data.data || []);
+      setUsersMeta(r.data);
+      setShowUsers(true);
+    } catch (e) {
+      console.error(e);
+
+      alert(
+        e.response?.data?.message ||
+          "خطا در دریافت کاربران"
+      );
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
+  // =========================
+  // Load orders
+  // =========================
+  async function loadOrders(page = 1) {
+    setOrdersLoading(true);
+
+    try {
+      const r = await api.get("/admin/orders", {
+        params: {
+          page,
+        },
+      });
+
+      setOrders(r.data.data || []);
+      setOrdersMeta(r.data);
+      setShowOrders(true);
+    } catch (e) {
+      console.error(e);
+
+      alert(
+        e.response?.data?.message ||
+          "خطا در دریافت سفارش‌ها"
+      );
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
+
+  // =========================
+  // Load products
+  // =========================
+  async function loadProducts(page = 1, filter = "") {
+  setProductsLoading(true);
+
+  try {
+    const r = await api.get("/admin/products-list", {
+      params: {
+        page,
+        ...(filter ? { filter } : {}),
+      },
+    });
+
+    setProducts(r.data.data || []);
+    setProductsMeta(r.data);
+    setShowProducts(true);
+  } catch (e) {
+    console.error(e);
+
+    alert(
+      e.response?.data?.message ||
+        "خطا در دریافت محصولات"
+    );
+  } finally {
+    setProductsLoading(false);
+  }
+}
+
+  // =========================
+  // Initial load
+  // =========================
   useEffect(() => {
     load();
   }, []);
-  async function approve(id) {
-    await api.post("/admin/payments/" + id + "/approve");
-    load();
+
+  // =========================
+  // Approve payment
+  // =========================
+  async function approve(payment) {
+    try {
+      await api.post(
+        `/admin/payments/${payment.id}/approve`
+      );
+
+      alert("پرداخت با موفقیت تأیید شد.");
+
+      await load();
+
+      if (showOrders) {
+        await loadOrders(
+          ordersMeta?.current_page || 1
+        );
+      }
+    } catch (e) {
+      console.error(e);
+
+      alert(
+        e.response?.data?.message ||
+          "خطا در تأیید پرداخت"
+      );
+    }
   }
+
+  // =========================
+  // Get latest payment
+  // =========================
+  function getPayment(order) {
+    if (
+      !order?.payments ||
+      !order.payments.length
+    ) {
+      return null;
+    }
+
+    return order.payments[
+      order.payments.length - 1
+    ];
+  }
+
+  // =========================
+  // Receipt URL
+  // =========================
+  function getReceiptUrl(payment) {
+    if (!payment?.receipt_path) {
+      return null;
+    }
+
+    return `http://127.0.0.1:8000/storage/${payment.receipt_path}`;
+  }
+
+  // =========================
+  // Translate order status
+  // =========================
+  function translateStatus(status) {
+    const statuses = {
+      pending: "در انتظار",
+      waiting_for_verification:
+        "در انتظار تأیید پرداخت",
+      waiting_for_check_verification:
+        "در انتظار تأیید چک",
+      confirmed: "تأیید شده",
+      processing: "در حال پردازش",
+      preparing: "در حال آماده‌سازی",
+      shipped: "ارسال شده",
+      delivered: "تحویل داده شده",
+      cancelled: "لغو شده",
+      rejected: "رد شده",
+    };
+
+    return statuses[status] || status || "-";
+  }
+
+  // =========================
+  // Translate payment method
+  // =========================
+  function translatePaymentMethod(method) {
+    const methods = {
+      online: "پرداخت آنلاین",
+      bank_transfer: "واریز بانکی",
+      check: "چک",
+    };
+
+    return methods[method] || method || "-";
+  }
+
+  // =========================
+  // Format date
+  // =========================
+  function formatDate(date) {
+    if (!date) {
+      return "-";
+    }
+
+    try {
+      return new Date(date).toLocaleDateString(
+        "fa-IR"
+      );
+    } catch {
+      return date;
+    }
+  }
+
+  // =========================
+  // Product image
+  // =========================
+  function getProductImage(product) {
+    if (product?.main_image) {
+      return product.main_image;
+    }
+
+    if (
+      product?.images &&
+      product.images.length > 0
+    ) {
+      return (
+        product.images[0].url ||
+        product.images[0].image ||
+        product.images[0].path ||
+        null
+      );
+    }
+
+    return null;
+  }
+
+  // =========================
+  // Dashboard stats
+  // =========================
+  const stats = [
+    {
+      key: "users",
+      label: "کاربران",
+      value: d?.users ?? 0,
+      clickable: true,
+    },
+    {
+      key: "products",
+      label: "محصولات",
+      value: d?.products ?? 0,
+      clickable: true,
+    },
+    {
+      key: "orders",
+      label: "سفارش‌ها",
+      value: d?.orders ?? 0,
+      clickable: true,
+    },
+    {
+      key: "pending_orders",
+      label: "در انتظار بررسی",
+      value: d?.pending_orders ?? 0,
+    },
+    {
+      key: "low_stock",
+      label: "موجودی کم",
+      value: d?.low_stock ?? 0,
+    },
+    {
+      key: "near_expiry",
+      label: "نزدیک انقضا",
+      value: d?.near_expiry ?? 0,
+    },
+  ];
+
   return (
     <section className="wrap section">
-      <div className="dashboard-head">
+
+      {/* ==================================================
+          HEADER
+      ================================================== */}
+
+      <div className="section-head">
         <div>
-          <span className="eyebrow">مدیریت فروشگاه</span>
-          <h2>داشبورد ادمین</h2>
+          <span className="eyebrow">
+            مدیریت فروشگاه
+          </span>
+
+          <h2>پنل مدیریت</h2>
         </div>
-        <Link className="btn" to="/admin/products/new">
-          + محصول جدید
-        </Link>
       </div>
-      <div className="stats">
-        {[
-          ["users", "کاربر"],
-          ["products", "محصول"],
-          ["orders", "سفارش"],
-          ["pending_orders", "در انتظار تأیید"],
-          ["low_stock", "موجودی کم"],
-          ["near_expiry", "نزدیک انقضا"],
-        ].map(([k, t]) => (
-          <div key={k}>
-            <b>{d?.[k] ?? 0}</b>
-            <span>{t}</span>
+
+
+      {/* ==================================================
+          DASHBOARD STATS
+      ================================================== */}
+
+      <div className="admin-grid">
+
+        {stats.map((x) => (
+          <div
+            key={x.key}
+            className="card"
+            style={{
+              cursor: x.clickable
+                ? "pointer"
+                : "default",
+            }}
+            onClick={() => {
+
+              if (x.key === "users") {
+                loadUsers(1);
+              }
+
+              if (x.key === "orders") {
+                loadOrders(1);
+              }
+
+              if (x.key === "products") {
+                loadProducts(1);
+              }
+
+            }}
+          >
+
+            <div className="card-body">
+
+              <h3>{x.label}</h3>
+
+              <div
+                style={{
+                  fontSize: "30px",
+                  fontWeight: "bold",
+                  marginTop: "10px",
+                }}
+              >
+                {x.value}
+              </div>
+
+
+              {x.key === "users" && (
+                <button
+                  className="btn full"
+                  style={{
+                    marginTop: "15px",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadUsers(1);
+                  }}
+                >
+                  مشاهده کاربران
+                </button>
+              )}
+
+
+              {x.key === "products" && (
+                <button
+                  className="btn full"
+                  style={{
+                    marginTop: "15px",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadProducts(1);
+                  }}
+                >
+                  مشاهده محصولات
+                </button>
+              )}
+
+
+              {x.key === "orders" && (
+                <button
+                  className="btn full"
+                  style={{
+                    marginTop: "15px",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadOrders(1);
+                  }}
+                >
+                  مشاهده سفارش‌ها
+                </button>
+              )}
+              {x.key === "pending_orders" && (
+                <button
+                  className="btn full"
+                  style={{
+                    marginTop: "15px",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadOrders(1);
+                  }}
+                >
+                  مشاهده سفارش‌های در انتظار
+                </button>
+              )}
+
+              {x.key === "low_stock" && (
+                <button
+                  className="btn full"
+                  style={{
+                    marginTop: "15px",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadProducts(1, "low_stock");
+                  }}
+                >
+                  مشاهده کالاهای موجودی کم
+                </button>
+              )}
+
+              {x.key === "near_expiry" && (
+                <button
+                  className="btn full"
+                  style={{
+                    marginTop: "15px",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadProducts(1, "near_expiry");
+                  }}
+                >
+                  مشاهده کالاهای نزدیک انقضا
+                </button>
+              )}
+
+            </div>
           </div>
         ))}
+
       </div>
-      <div className="admin-grid">
-        <div className="panel">
-          <h3>پرداخت‌های در انتظار تأیید</h3>
-          {payments.length ? (
-            payments.map((p) => (
-              <div className="tr" key={p.id}>
-                <span>{p.order?.order_number}</span>
-                <span>{money(p.amount)}</span>
-                <button className="btn small" onClick={() => approve(p.id)}>
-                  تأیید
-                </button>
+
+
+      {/* ==================================================
+          USERS
+      ================================================== */}
+
+      {showUsers && (
+
+        <div
+          className="card"
+          style={{
+            marginTop: "30px",
+          }}
+        >
+
+          <div className="card-body">
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+
+              <div>
+
+                <h2 style={{ margin: 0 }}>
+                  👥 کاربران
+                </h2>
+
+                <p>
+                  کاربران ثبت‌نام‌شده
+                </p>
+
               </div>
-            ))
-          ) : (
-            <p>موردی نیست.</p>
-          )}
-        </div>
-        <div className="panel">
-          <h3>محصولات</h3>
-          {products.slice(0, 8).map((p) => (
-            <div className="tr" key={p.id}>
-              <span>{p.name}</span>
-              <span>{p.stock}</span>
-              <Link to={"/admin/products/" + p.id}>ویرایش</Link>
+
+
+              <button
+                className="btn"
+                onClick={() =>
+                  setShowUsers(false)
+                }
+              >
+                بستن
+              </button>
+
             </div>
-          ))}
+
+
+            {usersLoading ? (
+
+              <p
+                style={{
+                  marginTop: "20px",
+                }}
+              >
+                در حال دریافت کاربران...
+              </p>
+
+            ) : users.length === 0 ? (
+
+              <p
+                style={{
+                  marginTop: "20px",
+                }}
+              >
+                کاربری پیدا نشد.
+              </p>
+
+            ) : (
+
+              <>
+
+                <div
+                  className="table"
+                  style={{
+                    marginTop: "20px",
+                    overflowX: "auto",
+                  }}
+                >
+
+                  <div
+                    className="tr"
+                    style={{
+                      fontWeight: "bold",
+                      minWidth: "900px",
+                    }}
+                  >
+
+                    <span>
+                      نام کاربری
+                    </span>
+
+                    <span>
+                      نام
+                    </span>
+
+                    <span>
+                      ایمیل
+                    </span>
+
+                    <span>
+                      موبایل
+                    </span>
+
+                    <span>
+                      نقش
+                    </span>
+
+                    <span>
+                      سفارش‌ها
+                    </span>
+
+                    <span>
+                      تاریخ ثبت‌نام
+                    </span>
+
+                  </div>
+
+
+                  {users.map((u) => (
+
+                    <div
+                      className="tr"
+                      key={u.id}
+                      style={{
+                        minWidth: "900px",
+                      }}
+                    >
+
+                      <span>
+                        {u.username || "-"}
+                      </span>
+
+                      <span>
+                        {u.name || "-"}
+                      </span>
+
+                      <span>
+                        {u.email || "-"}
+                      </span>
+
+                      <span>
+                        {u.phone || "-"}
+                      </span>
+
+                      <span>
+                        {u.role === "admin"
+                          ? "مدیر"
+                          : u.role ===
+                            "super_admin"
+                          ? "مدیر ارشد"
+                          : u.role ===
+                            "operator"
+                          ? "اپراتور"
+                          : "کاربر"}
+                      </span>
+
+                      <span>
+                        {u.orders_count ?? 0}
+                      </span>
+
+                      <span>
+                        {formatDate(
+                          u.created_at
+                        )}
+                      </span>
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+
+                {/* Users Pagination */}
+
+                {usersMeta &&
+                  usersMeta.last_page > 1 && (
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent:
+                          "center",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginTop: "20px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+
+                      <button
+                        className="btn"
+                        disabled={
+                          !usersMeta.prev_page_url ||
+                          usersLoading
+                        }
+                        onClick={() =>
+                          loadUsers(
+                            usersMeta.current_page -
+                              1
+                          )
+                        }
+                      >
+                        قبلی
+                      </button>
+
+
+                      <span>
+                        صفحه{" "}
+                        {usersMeta.current_page}{" "}
+                        از{" "}
+                        {usersMeta.last_page}
+                      </span>
+
+
+                      <button
+                        className="btn"
+                        disabled={
+                          !usersMeta.next_page_url ||
+                          usersLoading
+                        }
+                        onClick={() =>
+                          loadUsers(
+                            usersMeta.current_page +
+                              1
+                          )
+                        }
+                      >
+                        بعدی
+                      </button>
+
+                    </div>
+
+                  )}
+
+              </>
+
+            )}
+
+          </div>
+
         </div>
-      </div>
+
+      )}
+
+
+      {/* ==================================================
+          ORDERS
+      ================================================== */}
+
+      {showOrders && (
+
+        <div
+          className="card"
+          style={{
+            marginTop: "30px",
+          }}
+        >
+
+          <div className="card-body">
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+
+              <div>
+
+                <h2 style={{ margin: 0 }}>
+                  📦 همه سفارش‌ها
+                </h2>
+
+                <p>
+                  سفارش‌های ثبت‌شده کاربران
+                </p>
+
+              </div>
+
+
+              <button
+                className="btn"
+                onClick={() =>
+                  setShowOrders(false)
+                }
+              >
+                بستن
+              </button>
+
+            </div>
+
+
+            {ordersLoading ? (
+
+              <p
+                style={{
+                  marginTop: "20px",
+                }}
+              >
+                در حال دریافت سفارش‌ها...
+              </p>
+
+            ) : orders.length === 0 ? (
+
+              <p
+                style={{
+                  marginTop: "20px",
+                }}
+              >
+                سفارشی وجود ندارد.
+              </p>
+
+            ) : (
+
+              <>
+
+                {orders.map((order) => {
+
+                  const payment =
+                    getPayment(order);
+
+                  const receiptUrl =
+                    getReceiptUrl(
+                      payment
+                    );
+
+                  return (
+
+                    <div
+                      key={order.id}
+                      style={{
+                        border:
+                          "1px solid var(--lightgray)",
+                        borderRadius:
+                          "12px",
+                        padding: "20px",
+                        marginTop: "20px",
+                      }}
+                    >
+
+                      <h3>
+                        سفارش{" "}
+                        {order.order_number ||
+                          `#${order.id}`}
+                      </h3>
+
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit,minmax(180px,1fr))",
+                          gap: "10px",
+                        }}
+                      >
+
+                        <div>
+                          <b>
+                            مشتری:
+                          </b>{" "}
+                          {order.user?.name ||
+                            order.user
+                              ?.username ||
+                            "-"}
+                        </div>
+
+
+                        <div>
+                          <b>
+                            مبلغ:
+                          </b>{" "}
+                          {money(order.total)}
+                        </div>
+
+
+                        <div>
+                          <b>
+                            روش پرداخت:
+                          </b>{" "}
+                          {translatePaymentMethod(
+                            payment?.method ||
+                              order.payment_method
+                          )}
+                        </div>
+
+
+                        <div>
+                          <b>
+                            وضعیت:
+                          </b>{" "}
+                          {translateStatus(
+                            order.status
+                          )}
+                        </div>
+
+
+                        <div>
+                          <b>
+                            تاریخ:
+                          </b>{" "}
+                          {formatDate(
+                            order.created_at
+                          )}
+                        </div>
+
+                      </div>
+
+
+                      {/* Order Products */}
+
+                      <div
+                        style={{
+                          marginTop: "20px",
+                        }}
+                      >
+
+                        <h4>
+                          محصولات سفارش:
+                        </h4>
+
+
+                        {order.items &&
+                        order.items.length >
+                          0 ? (
+
+                          <div
+                            style={{
+                              display:
+                                "flex",
+                              flexDirection:
+                                "column",
+                              gap: "8px",
+                            }}
+                          >
+
+                            {order.items.map(
+                              (item) => (
+
+                                <div
+                                  key={item.id}
+                                  style={{
+                                    padding:
+                                      "10px",
+                                    background:
+                                      "rgba(0,0,0,0.04)",
+                                    borderRadius:
+                                      "8px",
+                                  }}
+                                >
+
+                                  <b>
+                                    {item
+                                      .product
+                                      ?.name ||
+                                      "محصول حذف شده"}
+                                  </b>
+
+                                  <span>
+                                    {" "}
+                                    ×{" "}
+                                    {
+                                      item.quantity
+                                    }
+                                  </span>
+
+                                </div>
+
+                              )
+                            )}
+
+                          </div>
+
+                        ) : (
+
+                          <p>
+                            محصولی برای این
+                            سفارش ثبت نشده
+                            است.
+                          </p>
+
+                        )}
+
+                      </div>
+
+
+                      {/* Payment */}
+
+                      {payment && (
+
+                        <div
+                          style={{
+                            marginTop:
+                              "20px",
+                          }}
+                        >
+
+                          <h4>
+                            اطلاعات پرداخت:
+                          </h4>
+
+
+                          <p>
+                            وضعیت پرداخت:{" "}
+                            {translateStatus(
+                              payment.status
+                            )}
+                          </p>
+
+
+                          {receiptUrl && (
+
+                            <div
+                              style={{
+                                marginTop:
+                                  "10px",
+                              }}
+                            >
+
+                              <p>
+                                رسید / تصویر
+                                پرداخت:
+                              </p>
+
+
+                              <a
+                                href={
+                                  receiptUrl
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+
+                                <img
+                                  src={
+                                    receiptUrl
+                                  }
+                                  alt="رسید پرداخت"
+                                  style={{
+                                    width:
+                                      "220px",
+                                    maxHeight:
+                                      "300px",
+                                    objectFit:
+                                      "contain",
+                                    borderRadius:
+                                      "10px",
+                                    border:
+                                      "1px solid var(--lightgray)",
+                                  }}
+                                />
+
+                              </a>
+
+                            </div>
+
+                          )}
+
+
+                          {payment.rejection_reason && (
+
+                            <p>
+
+                              <b>
+                                دلیل رد:
+                              </b>{" "}
+
+                              {
+                                payment.rejection_reason
+                              }
+
+                            </p>
+
+                          )}
+
+
+                          {payment.status ===
+                            "waiting_verification" && (
+
+                            <button
+                              className="btn"
+                              style={{
+                                marginTop:
+                                  "15px",
+                              }}
+                              onClick={() =>
+                                approve(
+                                  payment
+                                )
+                              }
+                            >
+                              تأیید پرداخت
+                            </button>
+
+                          )}
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  );
+
+                })}
+
+
+                {/* Orders Pagination */}
+
+                {ordersMeta &&
+                  ordersMeta.last_page > 1 && (
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent:
+                          "center",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginTop: "20px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+
+                      <button
+                        className="btn"
+                        disabled={
+                          !ordersMeta.prev_page_url ||
+                          ordersLoading
+                        }
+                        onClick={() =>
+                          loadOrders(
+                            ordersMeta.current_page -
+                              1
+                          )
+                        }
+                      >
+                        قبلی
+                      </button>
+
+
+                      <span>
+                        صفحه{" "}
+                        {ordersMeta.current_page}{" "}
+                        از{" "}
+                        {ordersMeta.last_page}
+                      </span>
+
+
+                      <button
+                        className="btn"
+                        disabled={
+                          !ordersMeta.next_page_url ||
+                          ordersLoading
+                        }
+                        onClick={() =>
+                          loadOrders(
+                            ordersMeta.current_page +
+                              1
+                          )
+                        }
+                      >
+                        بعدی
+                      </button>
+
+                    </div>
+
+                  )}
+
+              </>
+
+            )}
+
+          </div>
+
+        </div>
+
+      )}
+
+
+      {/* ==================================================
+          PRODUCTS
+      ================================================== */}
+
+      {showProducts && (
+
+        <div
+          className="card"
+          style={{
+            marginTop: "30px",
+          }}
+        >
+
+          <div className="card-body">
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+
+              <div>
+
+                <h2 style={{ margin: 0 }}>
+                  🛍️ مدیریت محصولات
+                </h2>
+
+                <p>
+                  همه محصولات فروشگاه
+                </p>
+
+              </div>
+
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                }}
+              >
+
+                <Link
+                  to="/admin/products/new"
+                  className="btn"
+                >
+                  + افزودن محصول
+                </Link>
+
+
+                <button
+                  className="btn"
+                  onClick={() =>
+                    setShowProducts(false)
+                  }
+                >
+                  بستن
+                </button>
+
+              </div>
+
+            </div>
+
+
+            {productsLoading ? (
+
+              <p
+                style={{
+                  marginTop: "20px",
+                }}
+              >
+                در حال دریافت محصولات...
+              </p>
+
+            ) : products.length === 0 ? (
+
+              <p
+                style={{
+                  marginTop: "20px",
+                }}
+              >
+                محصولی پیدا نشد.
+              </p>
+
+            ) : (
+
+              <>
+
+                <div
+                  className="table"
+                  style={{
+                    marginTop: "20px",
+                    overflowX: "auto",
+                  }}
+                >
+
+                  {/* Header */}
+
+                  <div
+                    className="tr"
+                    style={{
+                      fontWeight: "bold",
+                      minWidth: "1050px",
+                    }}
+                  >
+
+                    <span>
+                      تصویر
+                    </span>
+
+                    <span>
+                      نام محصول
+                    </span>
+
+                    <span>
+                      SKU
+                    </span>
+
+                    <span>
+                      قیمت
+                    </span>
+
+                    <span>
+                      تخفیف
+                    </span>
+
+                    <span>
+                      موجودی
+                    </span>
+
+                    <span>
+                      وضعیت
+                    </span>
+
+                    <span>
+                      عملیات
+                    </span>
+
+                  </div>
+
+
+                  {products.map(
+                    (product) => {
+
+                      const image =
+                        getProductImage(
+                          product
+                        );
+
+                      return (
+
+                        <div
+                          className="tr"
+                          key={product.id}
+                          style={{
+                            minWidth:
+                              "1050px",
+                          }}
+                        >
+
+                          {/* Image */}
+
+                          <span>
+
+                            {image ? (
+
+                              <img
+                                src={image}
+                                alt={
+                                  product.name
+                                }
+                                style={{
+                                  width:
+                                    "60px",
+                                  height:
+                                    "60px",
+                                  objectFit:
+                                    "contain",
+                                  borderRadius:
+                                    "8px",
+                                  border:
+                                    "1px solid var(--lightgray)",
+                                }}
+                              />
+
+                            ) : (
+
+                              <Package
+                                size={40}
+                              />
+
+                            )}
+
+                          </span>
+
+
+                          {/* Name */}
+
+                          <span>
+
+                            <b>
+                              {
+                                product.name
+                              }
+                            </b>
+
+                          </span>
+
+
+                          {/* SKU */}
+
+                          <span>
+                            {
+                              product.sku ||
+                              "-"
+                            }
+                          </span>
+
+
+                          {/* Price */}
+
+                          <span>
+                            {money(
+                              product.final_price ??
+                                product.price
+                            )}
+                          </span>
+
+
+                          {/* Discount */}
+
+                          <span>
+
+                            {product.discount_percentage >
+                            0
+                              ? `${product.discount_percentage}%`
+                              : "-"}
+
+                          </span>
+
+
+                          {/* Stock */}
+
+                          <span>
+
+                            {product.stock ??
+                              0}
+
+                          </span>
+
+
+                          {/* Status */}
+
+                          <span>
+
+                            {product.is_active
+                              ? "فعال"
+                              : "غیرفعال"}
+
+                          </span>
+
+
+                          {/* Actions */}
+
+                          <span
+                            style={{
+                              display:
+                                "flex",
+                              gap: "8px",
+                              flexWrap:
+                                "wrap",
+                            }}
+                          >
+
+                            <Link
+                              className="btn"
+                              to={`/admin/products/${product.id}`}
+                            >
+                              ویرایش
+                            </Link>
+
+                          </span>
+
+                        </div>
+
+                      );
+
+                    }
+                  )}
+
+                </div>
+
+
+                {/* Products Pagination */}
+
+                {productsMeta &&
+                  productsMeta.last_page >
+                    1 && (
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent:
+                          "center",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginTop: "20px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+
+                      <button
+                        className="btn"
+                        disabled={
+                          !productsMeta.prev_page_url ||
+                          productsLoading
+                        }
+                        onClick={() =>
+                          loadProducts(
+                            productsMeta.current_page -
+                              1
+                          )
+                        }
+                      >
+                        قبلی
+                      </button>
+
+
+                      <span>
+                        صفحه{" "}
+                        {
+                          productsMeta.current_page
+                        }{" "}
+                        از{" "}
+                        {
+                          productsMeta.last_page
+                        }
+                      </span>
+
+
+                      <button
+                        className="btn"
+                        disabled={
+                          !productsMeta.next_page_url ||
+                          productsLoading
+                        }
+                        onClick={() =>
+                          loadProducts(
+                            productsMeta.current_page +
+                              1
+                          )
+                        }
+                      >
+                        بعدی
+                      </button>
+
+                    </div>
+
+                  )}
+
+              </>
+
+            )}
+
+          </div>
+
+        </div>
+
+      )}
+
     </section>
   );
 }
