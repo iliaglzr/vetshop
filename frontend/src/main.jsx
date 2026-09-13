@@ -66,6 +66,7 @@ function Header({ cartCount, onLogout }) {
 
 function Home() {
   const [p, setP] = useState([]);
+
   useEffect(() => {
     api
       .get("/products", { params: { on_sale: 1 } })
@@ -74,28 +75,40 @@ function Home() {
 
   return (
     <>
-      <section className="hero">
-        <div>
-          <span className="eyebrow">شرکت توزیع و پخش طب گشتر کاوه</span>
-          <h1>همه‌چیز برای سلامت و نگهداری دام</h1>
-          <p>دارو، مکمل و تجهیزات با مدیریت هوشمند موجودی و سفارش.</p>
-          <Link className="btn" to="/products">
-            مشاهده محصولات
-          </Link>
-        </div>
-      </section>
+      {/* محصولات */}
       <section className="wrap section">
         <div className="section-head">
           <div>
             <span className="eyebrow">پیشنهادات ویژه</span>
             <h2>تخفیف‌های امروز</h2>
           </div>
+
           <Link to="/products">مشاهده همه</Link>
         </div>
+
         <div className="grid">
           {p.slice(0, 4).map((x) => (
             <ProductCard key={x.id} p={x} />
           ))}
+        </div>
+      </section>
+
+      {/* Hero */}
+      <section className="hero">
+        <div>
+          <span className="eyebrow">
+            شرکت توزیع و پخش طب گشتر کاوه
+          </span>
+
+          <h1>همه‌چیز برای سلامت و نگهداری دام</h1>
+
+          <p>
+            دارو، مکمل و تجهیزات با مدیریت هوشمند موجودی و سفارش.
+          </p>
+
+          <Link className="btn" to="/products">
+            مشاهده محصولات
+          </Link>
         </div>
       </section>
     </>
@@ -146,51 +159,160 @@ function ProductCard({ p }) {
   );
 }
 
-function Products() {
-  const [ps, setPs] = useState([]),
-    [q, setQ] = useState("");
-  async function load() {
-    const r = await api.get("/products", {
-      params: { search: q, in_stock: 1 },
-    });
+function Products(){
+const[ps,setPs]=useState([]);
+const[q,setQ]=useState('');
+const[page,setPage]=useState(1);
+const[meta,setMeta]=useState(null);
+const[loading,setLoading]=useState(false);
 
-    setPs(r.data.data || []);
-  }
-  useEffect(() => {
-    load();
-  }, []);
-  return (
-    <section className="wrap section">
-      <div className="section-head">
-        <div>
-          <span className="eyebrow">کاتالوگ</span>
-          <h2>محصولات</h2>
-        </div>
-      </div>
-      <div className="filters">
-        <div className="search">
-          <Search />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                load();
-              }
-            }}
-            placeholder="جستجوی نام، SKU یا توضیحات..."
-          />
-          <button onClick={load}>جستجو</button>
-        </div>
-      </div>
-      <div className="grid">
-        {ps.map((p) => (
-          <ProductCard key={p.id} p={p} />
-        ))}
-      </div>
-    </section>
-  );
+
+async function load(currentPage=page){
+    setLoading(true);
+
+    try{
+        const r=await api.get('/products',{
+            params:{
+                search:q,
+                page:currentPage
+            }
+        });
+
+        setPs(r.data.data||[]);
+        setMeta(r.data);
+        setPage(currentPage);
+    }catch(e){
+        alert(e.response?.data?.message||'خطا در دریافت محصولات');
+    }finally{
+        setLoading(false);
+    }
 }
+
+useEffect(()=>{
+    load(1);
+},[]);
+
+function searchProducts(){
+    load(1);
+}
+
+function changePage(newPage){
+    if(newPage<1) return;
+    if(meta?.last_page && newPage>meta.last_page) return;
+
+    load(newPage);
+
+    window.scrollTo({
+        top:0,
+        behavior:'smooth'
+    });
+}
+
+return <section className="wrap section">
+
+    <div className="section-head">
+        <div>
+            <span className="eyebrow">کاتالوگ</span>
+            <h2>محصولات</h2>
+        </div>
+    </div>
+
+    <div className="filters">
+
+        <div className="search">
+            <Search/>
+
+            <input
+                value={q}
+                onChange={e=>setQ(e.target.value)}
+                onKeyDown={e=>{
+                    if(e.key==='Enter') searchProducts();
+                }}
+                placeholder="جستجوی نام، SKU یا توضیحات..."
+            />
+
+            <button onClick={searchProducts}>
+                جستجو
+            </button>
+        </div>
+
+    </div>
+
+    {loading ? (
+        <div className="empty">
+            در حال دریافت محصولات...
+        </div>
+    ) : ps.length===0 ? (
+        <div className="empty">
+            محصولی پیدا نشد.
+        </div>
+    ) : (
+        <>
+            <div className="grid">
+                {ps.map(p=>
+                    <ProductCard key={p.id} p={p}/>
+                )}
+            </div>
+
+            {meta && meta.last_page>1 && (
+                <div
+                    style={{
+                        display:'flex',
+                        justifyContent:'center',
+                        alignItems:'center',
+                        gap:'8px',
+                        marginTop:'35px',
+                        flexWrap:'wrap'
+                    }}
+                >
+
+                    <button
+                        className="btn small"
+                        disabled={page===1}
+                        onClick={()=>changePage(page-1)}
+                    >
+                        قبلی
+                    </button>
+
+                    {Array.from(
+                        {length:meta.last_page},
+                        (_,i)=>i+1
+                    ).map(number=>(
+                        <button
+                            key={number}
+                            onClick={()=>changePage(number)}
+                            className="btn small"
+                            style={{
+                                background:
+                                    page===number
+                                        ? '#14213d'
+                                        : '#f28c28',
+                                minWidth:'40px'
+                            }}
+                        >
+                            {number}
+                        </button>
+                    ))}
+
+                    <button
+                        className="btn small"
+                        disabled={page===meta.last_page}
+                        onClick={()=>changePage(page+1)}
+                    >
+                        بعدی
+                    </button>
+
+                </div>
+            )}
+
+        </>
+    )}
+
+</section>
+
+
+}
+
 
 function Login() {
   const [email, setEmail] = useState(""),
@@ -562,7 +684,7 @@ function Dashboard() {
             <b>{o.order_number}</b>
             <span>{money(o.total)}</span>
             <span>{o.status}</span>
-            <Link to={"/orders/" + o.id}>جزئیات</Link>
+            <Link className="details-btn" to={"/orders/" + o.id}>جزئیات</Link>
           </div>
         ))}
       </div>

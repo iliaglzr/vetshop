@@ -72,7 +72,7 @@ class ProductController extends Controller
                     ? $q->orderByDesc('discount_percentage')
                     : $q->latest()));
 
-        return $q->paginate(12);
+        return $q->paginate(15);
     }
 
     public function show(Product $product)
