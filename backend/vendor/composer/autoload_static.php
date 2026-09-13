@@ -127,6 +127,10 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
         array (
             'voku\\' => 5,
         ),
+        'Z' =>
+        array (
+            'ZipStream\\' => 10,
+        ),
         'T' =>
         array (
             'TijsVerkoyen\\CssToInlineStyles\\' => 31,
@@ -182,6 +186,7 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
             'Psr\\Clock\\' => 10,
             'PhpParser\\' => 10,
             'PhpOption\\' => 10,
+            'PhpOffice\\PhpSpreadsheet\\' => 25,
         ),
         'N' =>
         array (
@@ -190,7 +195,9 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
         'M' =>
         array (
             'Monolog\\' => 8,
+            'Matrix\\' => 7,
             'Masterminds\\' => 12,
+            'Maatwebsite\\Excel\\' => 18,
         ),
         'L' =>
         array (
@@ -241,6 +248,9 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
         'C' =>
         array (
             'Cron\\' => 5,
+            'Composer\\Semver\\' => 16,
+            'Composer\\Pcre\\' => 14,
+            'Complex\\' => 8,
             'Carbon\\Doctrine\\' => 16,
             'Carbon\\' => 7,
         ),
@@ -259,6 +269,10 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
         'voku\\' =>
         array (
             0 => __DIR__ . '/..' . '/voku/portable-ascii/src/voku',
+        ),
+        'ZipStream\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/maennchen/zipstream-php/src',
         ),
         'TijsVerkoyen\\CssToInlineStyles\\' =>
         array (
@@ -437,6 +451,10 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
         array (
             0 => __DIR__ . '/..' . '/phpoption/phpoption/src/PhpOption',
         ),
+        'PhpOffice\\PhpSpreadsheet\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/phpoffice/phpspreadsheet/src/PhpSpreadsheet',
+        ),
         'Nette\\' =>
         array (
             0 => __DIR__ . '/..' . '/nette/schema/src',
@@ -446,9 +464,17 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
         array (
             0 => __DIR__ . '/..' . '/monolog/monolog/src/Monolog',
         ),
+        'Matrix\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/markbaker/matrix/classes/src',
+        ),
         'Masterminds\\' =>
         array (
             0 => __DIR__ . '/..' . '/masterminds/html5/src',
+        ),
+        'Maatwebsite\\Excel\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/maatwebsite/excel/src',
         ),
         'League\\Uri\\' =>
         array (
@@ -571,6 +597,18 @@ class ComposerStaticInit188d9144359b73335832c079d21e5920
         'Cron\\' =>
         array (
             0 => __DIR__ . '/..' . '/dragonmantank/cron-expression/src/Cron',
+        ),
+        'Composer\\Semver\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/composer/semver/src',
+        ),
+        'Composer\\Pcre\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/composer/pcre/src',
+        ),
+        'Complex\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/markbaker/complex/classes/src',
         ),
         'Carbon\\Doctrine\\' =>
         array (

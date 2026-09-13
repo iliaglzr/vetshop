@@ -1,19 +1,905 @@
-import React,{useEffect,useState} from 'react';import{createRoot}from'react-dom/client';import{BrowserRouter,useNavigate,useLocation,Link}from'react-router-dom';import{ShoppingCart,Search,User,Package,LayoutDashboard,LogOut,Menu,X,Plus,Minus,CheckCircle,Clock,Truck}from'lucide-react';import{api}from'./api';import'./styles.css';
-const money=n=>new Intl.NumberFormat('fa-IR').format(Math.round(n||0))+' تومان';
-function Header({cartCount,onLogout}){return <header><div className="wrap nav"><Link to="/" className="logo">Vet<span>Shop</span></Link><nav><Link to="/products">محصولات</Link><Link to="/products?category=1">داروها</Link><Link to="/products?category=2">مکمل‌ها</Link><Link to="/products?category=3">تجهیزات</Link></nav><div className="nav-actions"><Link to="/cart" className="icon"><ShoppingCart/> <b>{cartCount}</b></Link>{localStorage.getItem('token')?<><Link to="/dashboard"><User/></Link><button className="ghost" onClick={onLogout}><LogOut/></button></>:<Link className="btn small" to="/login">ورود</Link>}</div></div></header>}
-function Home(){const[p,setP]=useState([]);useEffect(()=>{api.get('/products',{params:{on_sale:1}}).then(r=>setP(r.data.data||[]))},[]);return <><section className="hero"><div><span className="eyebrow">فروشگاه تخصصی دامپزشکی</span><h1>همه‌چیز برای سلامت و نگهداری دام</h1><p>دارو، مکمل و تجهیزات با مدیریت هوشمند موجودی و سفارش.</p><Link className="btn" to="/products">مشاهده محصولات</Link></div></section><section className="wrap section"><div className="section-head"><div><span className="eyebrow">پیشنهادات ویژه</span><h2>تخفیف‌های امروز</h2></div><Link to="/products">مشاهده همه</Link></div><div className="grid">{p.slice(0,4).map(x=><ProductCard key={x.id} p={x}/>)}</div></section></>}
-function ProductCard({p}){const[busy,setBusy]=useState(false);async function add(){setBusy(true);try{await api.post('/cart/items',{product_id:p.id,quantity:p.minimum_order_quantity||1});alert('به سبد خرید اضافه شد')}catch(e){alert(e.response?.data?.message||'خطا')}finally{setBusy(false)}}return <article className="card"><div className="pic">{p.main_image?<img src={p.main_image}/>:<Package size={48}/>} {p.discount_percentage>0&&<span className="badge">{p.discount_percentage}% تخفیف</span>}</div><div className="card-body"><small>{p.brand?.name||'برند عمومی'}</small><h3>{p.name}</h3><p>{p.short_description||'محصول باکیفیت دامپزشکی'}</p><div className="price">{money(p.final_price??(p.price*(1-(p.discount_percentage||0)/100)))} {p.old_price&&<del>{money(p.old_price)}</del>}</div><div className="stock">موجودی: {p.stock} | حداقل: {p.minimum_order_quantity}</div><button className="btn full" disabled={busy||!p.stock} onClick={add}>{busy?'...':!p.stock?'ناموجود':'افزودن به سبد'}</button></div></article>}
-function Products(){const[ps,setPs]=useState([]),[brands,setBrands]=useState([]),[q,setQ]=useState(''),[brand,setBrand]=useState('');async function load(){const r=await api.get('/products',{params:{search:q,brand_id:brand||undefined,in_stock:1}});setPs(r.data.data||[])}useEffect(()=>{api.get('/brands').then(r=>setBrands(r.data))},[]);useEffect(()=>{load()},[brand]);return <section className="wrap section"><div className="section-head"><div><span className="eyebrow">کاتالوگ</span><h2>محصولات</h2></div></div><div className="filters"><div className="search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="جستجوی نام، SKU یا توضیحات..."/><button onClick={load}>جستجو</button></div><select value={brand} onChange={e=>setBrand(e.target.value)}><option value="">همه برندها</option>{brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div><div className="grid">{ps.map(p=><ProductCard key={p.id} p={p}/>)}</div></section>}
-function Login(){const[email,setEmail]=useState(''),[password,setPassword]=useState(''),nav=useNavigate();async function submit(e){e.preventDefault();try{const r=await api.post('/auth/login',{email,password});localStorage.setItem('token',r.data.token);localStorage.setItem('user',JSON.stringify(r.data.user));nav(r.data.user.role==='user'?'/dashboard':'/admin')}catch(e){alert(e.response?.data?.message||'ورود ناموفق بود')}}return <AuthForm title="ورود به حساب" onSubmit={submit}><input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="ایمیل" required/><input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="رمز عبور" required/><button className="btn full">ورود</button><p>حساب ندارید؟ <Link to="/register">ثبت‌نام</Link></p></AuthForm>}
-function Register(){const[f,setF]=useState({name:'',email:'',phone:'',password:'',password_confirmation:''}),nav=useNavigate();async function submit(e){e.preventDefault();try{const r=await api.post('/auth/register',f);localStorage.setItem('token',r.data.token);nav('/dashboard')}catch(e){alert(Object.values(e.response?.data?.errors||{x:['ثبت‌نام ناموفق']}).flat().join('\n'))}}return <AuthForm title="ساخت حساب" onSubmit={submit}>{['name','email','phone','password','password_confirmation'].map(k=><input key={k} value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})} type={k.includes('password')?'password':'text'} placeholder={{name:'نام و نام خانوادگی',email:'ایمیل',phone:'شماره تماس',password:'رمز عبور',password_confirmation:'تکرار رمز عبور'}[k]} required={k!=='phone'}/>) }<button className="btn full">ثبت‌نام</button></AuthForm>}
-function AuthForm({title,onSubmit,children}){return <section className="auth"><form className="panel" onSubmit={onSubmit}><span className="eyebrow">VetShop</span><h2>{title}</h2>{children}</form></section>}
-function Cart(){const[c,setC]=useState(null),nav=useNavigate();async function load(){setC((await api.get('/cart')).data)}useEffect(()=>{load()},[]);if(!localStorage.getItem('token'))return <NavigateToLogin/>;return <section className="wrap section"><h2>سبد خرید</h2>{!c?.items?.length?<div className="empty">سبد خرید شما خالی است.</div>:<div className="cart-layout"><div>{c.items.map(i=><div className="cart-item" key={i.id}><div><b>{i.product.name}</b><small>{money(i.unit_price)}</small></div><div className="qty"><button onClick={async()=>{await api.patch('/cart/items/'+i.id,{quantity:i.quantity+1});load()}}><Plus/></button><b>{i.quantity}</b><button onClick={async()=>{if(i.quantity>i.product.minimum_order_quantity){await api.patch('/cart/items/'+i.id,{quantity:i.quantity-1})}else await api.delete('/cart/items/'+i.id);load()}}><Minus/></button></div></div>)}</div><aside className="summary"><h3>خلاصه سفارش</h3><p>تعداد اقلام: {c.items.length}</p><strong>{money(c.items.reduce((s,i)=>s+i.unit_price*i.quantity,0))}</strong><button className="btn full" onClick={()=>nav('/checkout')}>ثبت سفارش</button></aside></div>}</section>}
-function NavigateToLogin(){const n=useNavigate();useEffect(()=>n('/login'),[]);return null}
-function Checkout(){const nav=useNavigate(),[method,setMethod]=useState('bank_transfer'),[form,setForm]=useState({province:'',city:'',address:'',postal_code:'',phone:''}),[order,setOrder]=useState(null);async function submit(e){e.preventDefault();try{const r=await api.post('/orders',{payment_method:method,shipping_address:form});setOrder(r.data);if(method==='online')alert('اتصال به درگاه باید در محیط واقعی به Gateway متصل شود.')}catch(e){alert(Object.values(e.response?.data?.errors||{x:[e.response?.data?.message||'خطا']}).flat().join('\n'))}}if(order)return <PaymentUpload order={order}/>;return <section className="wrap section"><h2>ثبت سفارش</h2><form className="checkout" onSubmit={submit}><div className="panel"><h3>آدرس ارسال</h3>{['province','city','address','postal_code','phone'].map(k=><input key={k} value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={{province:'استان',city:'شهر',address:'آدرس کامل',postal_code:'کد پستی',phone:'شماره تماس'}[k]} required={k!=='postal_code'}/>)}</div><div className="panel"><h3>روش پرداخت</h3><label className="radio"><input type="radio" checked={method==='bank_transfer'} onChange={()=>setMethod('bank_transfer')}/> شبا و ارسال فیش</label><label className="radio"><input type="radio" checked={method==='check'} onChange={()=>setMethod('check')}/> چک و ارسال تصویر</label><label className="radio"><input type="radio" checked={method==='online'} onChange={()=>setMethod('online')}/> پرداخت آنلاین</label>{method!=='online'&&<p className="hint">پس از ثبت سفارش، تصویر فیش یا چک را از دوربین/گالری ارسال کنید.</p>}<button className="btn full">ثبت سفارش</button></div></form></section>}
-function PaymentUpload({order}){const[method,setMethod]=useState(order.payment_method==='check'?'check':'bank_transfer'),[file,setFile]=useState(null),[done,setDone]=useState(false);async function send(e){e.preventDefault();const fd=new FormData();fd.append('receipt',file);fd.append('method',method);try{await api.post(`/orders/${order.id}/payment`,fd);setDone(true)}catch(e){alert(e.response?.data?.message||'آپلود ناموفق بود')}}if(done)return <section className="auth"><div className="panel center"><CheckCircle size={52}/><h2>در انتظار تأیید</h2><p>مدرک پرداخت برای اپراتور ارسال شد. پس از تأیید، سفارش نهایی می‌شود.</p><Link className="btn" to="/orders">پیگیری سفارش</Link></div></section>;return <section className="auth"><form className="panel" onSubmit={send}><h2>{method==='check'?'ارسال تصویر چک':'ارسال فیش واریزی'}</h2><input type="file" accept="image/*" capture="environment" onChange={e=>setFile(e.target.files[0])} required/><button className="btn full">ارسال برای تأیید</button></form></section>}
-function Dashboard(){const[u,setU]=useState(null),[orders,setOrders]=useState([]);useEffect(()=>{api.get('/me').then(r=>setU(r.data));api.get('/orders').then(r=>setOrders(r.data.data||[]))},[]);return <section className="wrap section"><div className="dashboard-head"><div><span className="eyebrow">حساب کاربری</span><h2>سلام {u?.name||'کاربر'} 👋</h2></div><Link className="btn" to="/products">خرید جدید</Link></div><div className="stats"><div><Package/><b>{orders.length}</b><span>سفارش</span></div><div><Clock/><b>{orders.filter(x=>x.status.includes('waiting')).length}</b><span>در انتظار</span></div><div><Truck/><b>{orders.filter(x=>['shipped','delivered'].includes(x.status)).length}</b><span>ارسال شده</span></div></div><h3>آخرین سفارش‌ها</h3><div className="table">{orders.map(o=><div className="tr" key={o.id}><b>{o.order_number}</b><span>{money(o.total)}</span><span>{o.status}</span><Link to={'/orders/'+o.id}>جزئیات</Link></div>)}</div></section>}
-function Admin(){const[d,setD]=useState(null),[payments,setPayments]=useState([]),[products,setProducts]=useState([]);async function load(){setD((await api.get('/admin/dashboard')).data);setPayments((await api.get('/admin/payments/pending')).data.data||[]);setProducts((await api.get('/products')).data.data||[])}useEffect(()=>{load()},[]);async function approve(id){await api.post('/admin/payments/'+id+'/approve');load()}return <section className="wrap section"><div className="dashboard-head"><div><span className="eyebrow">مدیریت فروشگاه</span><h2>داشبورد ادمین</h2></div><Link className="btn" to="/admin/products/new">+ محصول جدید</Link></div><div className="stats">{[['users','کاربر'],['products','محصول'],['orders','سفارش'],['pending_orders','در انتظار تأیید'],['low_stock','موجودی کم'],['near_expiry','نزدیک انقضا']].map(([k,t])=><div key={k}><b>{d?.[k]??0}</b><span>{t}</span></div>)}</div><div className="admin-grid"><div className="panel"><h3>پرداخت‌های در انتظار تأیید</h3>{payments.length?payments.map(p=><div className="tr" key={p.id}><span>{p.order?.order_number}</span><span>{money(p.amount)}</span><button className="btn small" onClick={()=>approve(p.id)}>تأیید</button></div>):<p>موردی نیست.</p>}</div><div className="panel"><h3>محصولات</h3>{products.slice(0,8).map(p=><div className="tr" key={p.id}><span>{p.name}</span><span>{p.stock}</span><Link to={'/admin/products/'+p.id}>ویرایش</Link></div>)}</div></div></section>}
-function AdminProduct({id}){const[p,setP]=useState({name:'',sku:'',category_id:1,brand_id:'',price:'',old_price:'',discount_percentage:0,stock:0,minimum_order_quantity:1,minimum_stock:5,description:'',is_featured:false,is_active:true}),[cats,setCats]=useState([]),[brands,setBrands]=useState([]),nav=useNavigate();useEffect(()=>{api.get('/categories').then(r=>setCats(r.data));api.get('/brands').then(r=>setBrands(r.data));if(id)api.get('/products/'+id).then(r=>setP(r.data))},[id]);async function save(e){e.preventDefault();try{if(id)await api.put('/admin/products/'+id,p);else await api.post('/admin/products',p);nav('/admin')}catch(e){alert(Object.values(e.response?.data?.errors||{x:[e.response?.data?.message||'خطا']}).flat().join('\n'))}}return <section className="wrap section"><div className="panel form"><h2>{id?'ویرایش محصول':'افزودن محصول'}</h2><div className="form-grid">{[['name','نام محصول'],['sku','SKU'],['price','قیمت'],['old_price','قیمت قبلی'],['discount_percentage','تخفیف درصدی'],['stock','موجودی'],['minimum_order_quantity','حداقل سفارش'],['minimum_stock','حداقل موجودی'],['expiration_date','تاریخ انقضا']].map(([k,l])=><input key={k} value={p[k]??''} onChange={e=>setP({...p,[k]:e.target.value})} placeholder={l} />)}<select value={p.category_id||''} onChange={e=>setP({...p,category_id:e.target.value})}>{cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select value={p.brand_id||''} onChange={e=>setP({...p,brand_id:e.target.value})}><option value="">برند</option>{brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div><textarea value={p.description||''} onChange={e=>setP({...p,description:e.target.value})} placeholder="توضیحات کامل محصول"/><label><input type="checkbox" checked={!!p.is_featured} onChange={e=>setP({...p,is_featured:e.target.checked})}/> محصول ویژه</label><button className="btn" onClick={save}>ذخیره محصول</button></div></section>}
-function Orders(){const[o,setO]=useState([]);useEffect(()=>{api.get('/orders').then(r=>setO(r.data.data||[]))},[]);return <section className="wrap section"><h2>سفارش‌های من</h2><div className="table">{o.map(x=><div className="tr" key={x.id}><b>{x.order_number}</b><span>{money(x.total)}</span><span>{x.status}</span><Link to={'/orders/'+x.id}>جزئیات</Link></div>)}</div></section>}
-function OrderDetail({id}){const[o,setO]=useState(null);useEffect(()=>{api.get('/orders/'+id).then(r=>setO(r.data))},[id]);return <section className="wrap section"><h2>سفارش {o?.order_number}</h2><div className="timeline"><span>ثبت سفارش</span><span>تأیید پرداخت</span><span>آماده‌سازی</span><span>ارسال</span><span>تحویل</span></div><div className="panel">{o?.items?.map(i=><div className="tr" key={i.id}><span>{i.product_name}</span><span>{i.quantity} عدد</span><b>{money(i.total)}</b></div>)}<hr/><h3>{money(o?.total)}</h3>{o?.rejection_reason&&<p className="error">دلیل رد: {o.rejection_reason}</p>}</div></section>}
-function App(){const[cartCount,setCartCount]=useState(0),loc=useLocation();async function refresh(){if(localStorage.getItem('token'))try{const c=(await api.get('/cart')).data;setCartCount(c.items?.reduce((s,i)=>s+i.quantity,0)||0)}catch{}}useEffect(()=>{refresh()},[loc.pathname]);function logout(){localStorage.clear();location.href='/'}let content;if(loc.pathname==='/')content=<Home/>;else if(loc.pathname==='/products')content=<Products/>;else if(loc.pathname==='/login')content=<Login/>;else if(loc.pathname==='/register')content=<Register/>;else if(loc.pathname==='/cart')content=<Cart/>;else if(loc.pathname==='/checkout')content=<Checkout/>;else if(loc.pathname==='/dashboard')content=<Dashboard/>;else if(loc.pathname==='/orders')content=<Orders/>;else if(loc.pathname.startsWith('/orders/'))content=<OrderDetail id={loc.pathname.split('/')[2]}/>;else if(loc.pathname==='/admin')content=<Admin/>;else if(loc.pathname==='/admin/products/new')content=<AdminProduct/>;else if(loc.pathname.startsWith('/admin/products/'))content=<AdminProduct id={loc.pathname.split('/')[3]}/>;else content=<Home/>;return <><Header cartCount={cartCount} onLogout={logout}/>{content}<footer><div className="wrap"><b>VetShop</b><span>فروشگاه تخصصی دارو، مکمل و تجهیزات دامپزشکی</span></div></footer></>};createRoot(document.getElementById('root')).render(<BrowserRouter><App/></BrowserRouter>);
+import React, { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  BrowserRouter,
+  useNavigate,
+  useLocation,
+  Link,
+} from "react-router-dom";
+import {
+  ShoppingCart,
+  Search,
+  User,
+  Package,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  X,
+  Plus,
+  Minus,
+  CheckCircle,
+  Clock,
+  Truck,
+} from "lucide-react";
+import { api } from "./api";
+import "./styles.css";
+
+const money = (n) =>
+  new Intl.NumberFormat("fa-IR").format(Math.round(n || 0)) + " تومان";
+
+function Header({ cartCount, onLogout }) {
+  return (
+    <header>
+      <div className="wrap nav">
+        <Link to="/" className="logo">
+          Vet<span>Shop</span>
+        </Link>
+        <nav>
+          <Link to="/products">محصولات </Link>
+          <Link to="/products?category=1">داروها</Link>
+          <Link to="/products?category=2">مکمل‌ها</Link>
+          <Link to="/products?category=3">تجهیزات</Link>
+        </nav>
+        <div className="nav-actions">
+          <Link to="/cart" className="icon">
+            <ShoppingCart /> <b>{cartCount}</b>
+          </Link>
+          {localStorage.getItem("token") ? (
+            <>
+              <Link to="/dashboard">
+                <User />
+              </Link>
+              <button className="ghost" onClick={onLogout}>
+                <LogOut />
+              </button>
+            </>
+          ) : (
+            <Link className="btn small" to="/login">
+              ورود
+            </Link>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function Home() {
+  const [p, setP] = useState([]);
+  useEffect(() => {
+    api
+      .get("/products", { params: { on_sale: 1 } })
+      .then((r) => setP(r.data.data || []));
+  }, []);
+
+  return (
+    <>
+      <section className="hero">
+        <div>
+          <span className="eyebrow">شرکت توزیع و پخش طب گشتر کاوه</span>
+          <h1>همه‌چیز برای سلامت و نگهداری دام</h1>
+          <p>دارو، مکمل و تجهیزات با مدیریت هوشمند موجودی و سفارش.</p>
+          <Link className="btn" to="/products">
+            مشاهده محصولات
+          </Link>
+        </div>
+      </section>
+      <section className="wrap section">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">پیشنهادات ویژه</span>
+            <h2>تخفیف‌های امروز</h2>
+          </div>
+          <Link to="/products">مشاهده همه</Link>
+        </div>
+        <div className="grid">
+          {p.slice(0, 4).map((x) => (
+            <ProductCard key={x.id} p={x} />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function ProductCard({ p }) {
+  const [busy, setBusy] = useState(false);
+  async function add() {
+    setBusy(true);
+    try {
+      await api.post("/cart/items", {
+        product_id: p.id,
+        quantity: p.minimum_order_quantity || 1,
+      });
+      alert("به سبد خرید اضافه شد");
+    } catch (e) {
+      alert(e.response?.data?.message || "خطا");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <article className="card">
+      <div className="pic">
+        {p.main_image ? <img src={p.main_image} /> : <Package size={48} />}
+        {p.discount_percentage > 0 && (
+          <span className="badge">{p.discount_percentage}% تخفیف</span>
+        )}
+      </div>
+      <div className="card-body">
+        <h3>{p.name}</h3>
+        <p>{p.short_description || "محصول باکیفیت دامپزشکی"}</p>
+        <div className="price">
+          {money(
+            p.final_price ?? p.price * (1 - (p.discount_percentage || 0) / 100),
+          )}
+          {p.old_price && <del>{money(p.old_price)}</del>}
+        </div>
+        <div className="stock">
+          موجودی: {p.stock} | حداقل: {p.minimum_order_quantity}
+        </div>
+        <button className="btn full" disabled={busy || !p.stock} onClick={add}>
+          {busy ? "..." : !p.stock ? "ناموجود" : "افزودن به سبد"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function Products() {
+  const [ps, setPs] = useState([]),
+    [q, setQ] = useState("");
+  async function load() {
+    const r = await api.get("/products", {
+      params: { search: q, in_stock: 1 },
+    });
+
+    setPs(r.data.data || []);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+  return (
+    <section className="wrap section">
+      <div className="section-head">
+        <div>
+          <span className="eyebrow">کاتالوگ</span>
+          <h2>محصولات</h2>
+        </div>
+      </div>
+      <div className="filters">
+        <div className="search">
+          <Search />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                load();
+              }
+            }}
+            placeholder="جستجوی نام، SKU یا توضیحات..."
+          />
+          <button onClick={load}>جستجو</button>
+        </div>
+      </div>
+      <div className="grid">
+        {ps.map((p) => (
+          <ProductCard key={p.id} p={p} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Login() {
+  const [email, setEmail] = useState(""),
+    [password, setPassword] = useState(""),
+    nav = useNavigate();
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const r = await api.post("/auth/login", { email, password });
+      localStorage.setItem("token", r.data.token);
+      localStorage.setItem("user", JSON.stringify(r.data.user));
+      nav(r.data.user.role==='user'?'/':'/admin');
+    } catch (e) {
+      alert(e.response?.data?.message || "ورود ناموفق بود");
+    }
+  }
+  return (
+    <AuthForm title="ورود به حساب" onSubmit={submit}>
+      <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        type="email"
+        placeholder="ایمیل"
+        required
+      />
+      <input
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        type="password"
+        placeholder="رمز عبور"
+        required
+      />
+      <button className="btn full">ورود</button>
+      <p>
+        حساب ندارید؟ <Link to="/register">ثبت‌نام</Link>
+      </p>
+    </AuthForm>
+  );
+}
+
+function Register() {
+  const [f, setF] = useState({
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+      password_confirmation: "",
+    }),
+    nav = useNavigate();
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const r = await api.post("/auth/register", f);
+      localStorage.setItem("token", r.data.token);
+      nav("/dashboard");
+    } catch (e) {
+      alert(
+        Object.values(e.response?.data?.errors || { x: ["ثبت‌نام ناموفق"] })
+          .flat()
+          .join("\n"),
+      );
+    }
+  }
+  return (
+    <AuthForm title="ساخت حساب" onSubmit={submit}>
+      {["name", "email", "phone", "password", "password_confirmation"].map(
+        (k) => (
+          <input
+            key={k}
+            value={f[k]}
+            onChange={(e) => setF({ ...f, [k]: e.target.value })}
+            type={k.includes("password") ? "password" : "text"}
+            placeholder={
+              {
+                name: "نام و نام خانوادگی",
+                email: "ایمیل",
+                phone: "شماره تماس",
+                password: "رمز عبور",
+                password_confirmation: "تکرار رمز عبور",
+              }[k]
+            }
+            required={k !== "phone"}
+          />
+        ),
+      )}
+      <button className="btn full">ثبت‌نام</button>
+    </AuthForm>
+  );
+}
+
+function AuthForm({ title, onSubmit, children }) {
+  return (
+    <section className="auth">
+      <form className="panel" onSubmit={onSubmit}>
+        <span className="eyebrow">VetShop</span>
+        <h2>{title}</h2>
+        {children}
+      </form>
+    </section>
+  );
+}
+
+function Cart() {
+  const [c, setC] = useState(null),
+    nav = useNavigate();
+  async function load() {
+    setC((await api.get("/cart")).data);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+  if (!localStorage.getItem("token")) return <NavigateToLogin />;
+  return (
+    <section className="wrap section">
+      <h2>سبد خرید</h2>
+      {!c?.items?.length ? (
+        <div className="empty">سبد خرید شما خالی است.</div>
+      ) : (
+        <div className="cart-layout">
+          <div>
+            {c.items.map((i) => (
+              <div className="cart-item" key={i.id}>
+                <div>
+                  <b>{i.product.name}</b>
+                  <small>{money(i.unit_price)}</small>
+                </div>
+                <div className="qty">
+                  <button
+                    onClick={async () => {
+                      await api.patch("/cart/items/" + i.id, {
+                        quantity: i.quantity + 1,
+                      });
+                      load();
+                    }}
+                  >
+                    <Plus />
+                  </button>
+                  <b>{i.quantity}</b>
+                  <button
+                    onClick={async () => {
+                      if (i.quantity > i.product.minimum_order_quantity) {
+                        await api.patch("/cart/items/" + i.id, {
+                          quantity: i.quantity - 1,
+                        });
+                      } else await api.delete("/cart/items/" + i.id);
+                      load();
+                    }}
+                  >
+                    <Minus />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <aside className="summary">
+            <h3>خلاصه سفارش</h3>
+            <p>تعداد اقلام: {c.items.length}</p>
+            <strong>
+              {money(
+                c.items.reduce((s, i) => s + i.unit_price * i.quantity, 0),
+              )}
+            </strong>
+            <button className="btn full" onClick={() => nav("/checkout")}>
+              ثبت سفارش
+            </button>
+          </aside>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function NavigateToLogin() {
+  const n = useNavigate();
+  useEffect(() => n("/login"), []);
+  return null;
+}
+
+function Checkout() {
+  const nav = useNavigate(),
+    [method, setMethod] = useState("bank_transfer"),
+    [form, setForm] = useState({
+      province: "",
+      city: "",
+      address: "",
+      postal_code: "",
+      phone: "",
+    }),
+    [order, setOrder] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const r = await api.post("/orders", {
+        payment_method: method,
+        shipping_address: form,
+      });
+      setOrder(r.data);
+      if (method === "online")
+        alert("اتصال به درگاه باید در محیط واقعی به Gateway متصل شود.");
+    } catch (e) {
+      alert(
+        Object.values(
+          e.response?.data?.errors || {
+            x: [e.response?.data?.message || "خطا"],
+          },
+        )
+          .flat()
+          .join("\n"),
+      );
+    }
+  }
+  if (order) return <PaymentUpload order={order} />;
+  return (
+    <section className="wrap section">
+      <h2>ثبت سفارش</h2>
+      <form className="checkout" onSubmit={submit}>
+        <div className="panel">
+          <h3>آدرس ارسال</h3>
+          {["province", "city", "address", "postal_code", "phone"].map((k) => (
+            <input
+              key={k}
+              value={form[k]}
+              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+              placeholder={
+                {
+                  province: "استان",
+                  city: "شهر",
+                  address: "آدرس کامل",
+                  postal_code: "کد پستی",
+                  phone: "شماره تماس",
+                }[k]
+              }
+              required={k !== "postal_code"}
+            />
+          ))}
+        </div>
+        <div className="panel">
+          <h3>روش پرداخت</h3>
+          <label className="radio">
+            <input
+              type="radio"
+              checked={method === "bank_transfer"}
+              onChange={() => setMethod("bank_transfer")}
+            />{" "}
+            شبا و ارسال فیش
+          </label>
+          <label className="radio">
+            <input
+              type="radio"
+              checked={method === "check"}
+              onChange={() => setMethod("check")}
+            />{" "}
+            چک و ارسال تصویر
+          </label>
+          <label className="radio">
+            <input
+              type="radio"
+              checked={method === "online"}
+              onChange={() => setMethod("online")}
+            />{" "}
+            پرداخت آنلاین
+          </label>
+          {method !== "online" && (
+            <p className="hint">
+              پس از ثبت سفارش، تصویر فیش یا چک را از دوربین/گالری ارسال کنید.
+            </p>
+          )}
+          <button className="btn full">ثبت سفارش</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function PaymentUpload({ order }) {
+  const [method, setMethod] = useState(
+      order.payment_method === "check" ? "check" : "bank_transfer",
+    ),
+    [file, setFile] = useState(null),
+    [done, setDone] = useState(false);
+  async function send(e) {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.append("receipt", file);
+    fd.append("method", method);
+    try {
+      await api.post(`/orders/${order.id}/payment`, fd);
+      setDone(true);
+    } catch (e) {
+      alert(e.response?.data?.message || "آپلود ناموفق بود");
+    }
+  }
+  if (done)
+    return (
+      <section className="auth">
+        <div className="panel center">
+          <CheckCircle size={52} />
+          <h2>در انتظار تأیید</h2>
+          <p>
+            مدرک پرداخت برای اپراتور ارسال شد. پس از تأیید، سفارش نهایی می‌شود.
+          </p>
+          <Link className="btn" to="/orders">
+            پیگیری سفارش
+          </Link>
+        </div>
+      </section>
+    );
+  return (
+    <section className="auth">
+      <form className="panel" onSubmit={send}>
+        <h2>{method === "check" ? "ارسال تصویر چک" : "ارسال فیش واریزی"}</h2>
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(e) => setFile(e.target.files[0])}
+          required
+        />
+        <button className="btn full">ارسال برای تأیید</button>
+      </form>
+    </section>
+  );
+}
+
+function Dashboard() {
+  const [u, setU] = useState(null),
+    [orders, setOrders] = useState([]);
+  useEffect(() => {
+    api.get("/me").then((r) => setU(r.data));
+    api.get("/orders").then((r) => setOrders(r.data.data || []));
+  }, []);
+  return (
+    <section className="wrap section">
+      <div className="dashboard-head">
+        <div>
+          <span className="eyebrow">حساب کاربری</span>
+          <h2>سلام {u?.name || "کاربر"} 👋</h2>
+        </div>
+        <Link className="btn" to="/products">
+          خرید جدید
+        </Link>
+      </div>
+      <div className="stats">
+        <div>
+          <Package />
+          <b>{orders.length}</b>
+          <span>سفارش</span>
+        </div>
+        <div>
+          <Clock />
+          <b>{orders.filter((x) => x.status.includes("waiting")).length}</b>
+          <span>در انتظار</span>
+        </div>
+        <div>
+          <Truck />
+          <b>
+            {
+              orders.filter((x) => ["shipped", "delivered"].includes(x.status))
+                .length
+            }
+          </b>
+          <span>ارسال شده</span>
+        </div>
+      </div>
+      <h3>آخرین سفارش‌ها</h3>
+      <div className="table">
+        {orders.map((o) => (
+          <div className="tr" key={o.id}>
+            <b>{o.order_number}</b>
+            <span>{money(o.total)}</span>
+            <span>{o.status}</span>
+            <Link to={"/orders/" + o.id}>جزئیات</Link>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+function Admin() {
+  const [d, setD] = useState(null),
+    [payments, setPayments] = useState([]),
+    [products, setProducts] = useState([]);
+  async function load() {
+    setD((await api.get("/admin/dashboard")).data);
+    setPayments((await api.get("/admin/payments/pending")).data.data || []);
+    setProducts((await api.get("/products")).data.data || []);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+  async function approve(id) {
+    await api.post("/admin/payments/" + id + "/approve");
+    load();
+  }
+  return (
+    <section className="wrap section">
+      <div className="dashboard-head">
+        <div>
+          <span className="eyebrow">مدیریت فروشگاه</span>
+          <h2>داشبورد ادمین</h2>
+        </div>
+        <Link className="btn" to="/admin/products/new">
+          + محصول جدید
+        </Link>
+      </div>
+      <div className="stats">
+        {[
+          ["users", "کاربر"],
+          ["products", "محصول"],
+          ["orders", "سفارش"],
+          ["pending_orders", "در انتظار تأیید"],
+          ["low_stock", "موجودی کم"],
+          ["near_expiry", "نزدیک انقضا"],
+        ].map(([k, t]) => (
+          <div key={k}>
+            <b>{d?.[k] ?? 0}</b>
+            <span>{t}</span>
+          </div>
+        ))}
+      </div>
+      <div className="admin-grid">
+        <div className="panel">
+          <h3>پرداخت‌های در انتظار تأیید</h3>
+          {payments.length ? (
+            payments.map((p) => (
+              <div className="tr" key={p.id}>
+                <span>{p.order?.order_number}</span>
+                <span>{money(p.amount)}</span>
+                <button className="btn small" onClick={() => approve(p.id)}>
+                  تأیید
+                </button>
+              </div>
+            ))
+          ) : (
+            <p>موردی نیست.</p>
+          )}
+        </div>
+        <div className="panel">
+          <h3>محصولات</h3>
+          {products.slice(0, 8).map((p) => (
+            <div className="tr" key={p.id}>
+              <span>{p.name}</span>
+              <span>{p.stock}</span>
+              <Link to={"/admin/products/" + p.id}>ویرایش</Link>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+function AdminProduct({ id }) {
+  const [p, setP] = useState({
+      name: "",
+      sku: "",
+      category_id: 1,
+      price: "",
+      old_price: "",
+      discount_percentage: 0,
+      stock: 0,
+      minimum_order_quantity: 1,
+      minimum_stock: 5,
+      description: "",
+      is_featured: false,
+      is_active: true,
+    }),
+    [cats, setCats] = useState([]),
+    nav = useNavigate();
+  useEffect(() => {
+    api.get("/categories").then((r) => setCats(r.data));
+    if (id) api.get("/products/" + id).then((r) => setP(r.data));
+  }, [id]);
+  async function save(e) {
+    e.preventDefault();
+    try {
+      if (id) await api.put("/admin/products/" + id, p);
+      else await api.post("/admin/products", p);
+      nav("/admin");
+    } catch (e) {
+      alert(
+        Object.values(
+          e.response?.data?.errors || {
+            x: [e.response?.data?.message || "خطا"],
+          },
+        )
+          .flat()
+          .join("\n"),
+      );
+    }
+  }
+  return (
+    <section className="wrap section">
+      <div className="panel form">
+        <h2>{id ? "ویرایش محصول" : "افزودن محصول"}</h2>
+        <div className="form-grid">
+          {[
+            ["name", "نام محصول"],
+            ["sku", "SKU"],
+            ["price", "قیمت"],
+            ["old_price", "قیمت قبلی"],
+            ["discount_percentage", "تخفیف درصدی"],
+            ["stock", "موجودی"],
+            ["minimum_order_quantity", "حداقل سفارش"],
+            ["minimum_stock", "حداقل موجودی"],
+            ["expiration_date", "تاریخ انقضا"],
+          ].map(([k, l]) => (
+            <input
+              key={k}
+              value={p[k] ?? ""}
+              onChange={(e) => setP({ ...p, [k]: e.target.value })}
+              placeholder={l}
+            />
+          ))}
+          <select
+            value={p.category_id || ""}
+            onChange={(e) => setP({ ...p, category_id: e.target.value })}
+          >
+            {cats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <textarea
+          value={p.description || ""}
+          onChange={(e) => setP({ ...p, description: e.target.value })}
+          placeholder="توضیحات کامل محصول"
+        />
+        <label>
+          <input
+            type="checkbox"
+            checked={!!p.is_featured}
+            onChange={(e) => setP({ ...p, is_featured: e.target.checked })}
+          />{" "}
+          محصول ویژه
+        </label>
+        <button className="btn" onClick={save}>
+          ذخیره محصول
+        </button>
+      </div>
+    </section>
+  );
+}
+function Orders() {
+  const [o, setO] = useState([]);
+  useEffect(() => {
+    api.get("/orders").then((r) => setO(r.data.data || []));
+  }, []);
+  return (
+    <section className="wrap section">
+      <h2>سفارش‌های من</h2>
+      <div className="table">
+        {o.map((x) => (
+          <div className="tr" key={x.id}>
+            <b>{x.order_number}</b>
+            <span>{money(x.total)}</span>
+            <span>{x.status}</span>
+            <Link to={"/orders/" + x.id}>جزئیات</Link>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+function OrderDetail({ id }) {
+  const [o, setO] = useState(null);
+  useEffect(() => {
+    api.get("/orders/" + id).then((r) => setO(r.data));
+  }, [id]);
+  return (
+    <section className="wrap section">
+      <h2>سفارش {o?.order_number}</h2>
+      <div className="timeline">
+        <span>ثبت سفارش</span>
+        <span>تأیید پرداخت</span>
+        <span>آماده‌سازی</span>
+        <span>ارسال</span>
+        <span>تحویل</span>
+      </div>
+      <div className="panel">
+        {o?.items?.map((i) => (
+          <div className="tr" key={i.id}>
+            <span>{i.product_name}</span>
+            <span>{i.quantity} عدد</span>
+            <b>{money(i.total)}</b>
+          </div>
+        ))}
+        <hr />
+        <h3>{money(o?.total)}</h3>
+        {o?.rejection_reason && (
+          <p className="error">دلیل رد: {o.rejection_reason}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+function isLoggedIn(){
+    return !!localStorage.getItem('token');
+}
+
+function App(){
+    const[cartCount,setCartCount]=useState(0);
+    const loc=useLocation();
+
+    async function refresh(){
+        if(isLoggedIn()){
+            try{
+                const c=(await api.get('/cart')).data;
+                setCartCount(
+                    c.items?.reduce((s,i)=>s+i.quantity,0)||0
+                );
+            }catch{}
+        }
+    }
+
+    useEffect(()=>{
+        refresh();
+    },[loc.pathname]);
+
+    function logout(){
+        localStorage.clear();
+        location.href='/login';
+    }
+
+    const publicPages=['/login','/register'];
+    const isPublicPage=publicPages.includes(loc.pathname);
+
+    // اگر کاربر لاگین نیست و وارد صفحه‌ای غیر از Login/Register شده
+    if(!isLoggedIn() && !isPublicPage){
+        return <LoginRedirect/>;
+    }
+
+    // اگر کاربر لاگین است و می‌خواهد Login/Register را باز کند
+    if(isLoggedIn() && isPublicPage){
+        location.href='/';
+        return null;
+    }
+
+    let content;
+
+    if(loc.pathname==='/')
+        content=<Home/>;
+
+    else if(loc.pathname==='/products')
+        content=<Products/>;
+
+    else if(loc.pathname==='/login')
+        content=<Login/>;
+
+    else if(loc.pathname==='/register')
+        content=<Register/>;
+
+    else if(loc.pathname==='/cart')
+        content=<Cart/>;
+
+    else if(loc.pathname==='/checkout')
+        content=<Checkout/>;
+
+    else if(loc.pathname==='/dashboard')
+        content=<Dashboard/>;
+
+    else if(loc.pathname==='/orders')
+        content=<Orders/>;
+
+    else if(loc.pathname.startsWith('/orders/'))
+        content=<OrderDetail id={loc.pathname.split('/')[2]}/>;
+
+    else if(loc.pathname==='/admin')
+        content=<Admin/>;
+
+    else if(loc.pathname==='/admin/products/new')
+        content=<AdminProduct/>;
+
+    else if(loc.pathname.startsWith('/admin/products/'))
+        content=<AdminProduct id={loc.pathname.split('/')[3]}/>;
+
+    else
+        content=<Home/>;
+
+    return <>
+        <Header
+            cartCount={cartCount}
+            onLogout={logout}
+        />
+
+        {content}
+
+        <footer>
+            <div className="wrap">
+                <b>VetShop</b>
+                <span>
+                    فروشگاه تخصصی دارو، مکمل و تجهیزات دامپزشکی
+                </span>
+            </div>
+        </footer>
+    </>;
+}
+function LoginRedirect(){
+    const nav=useNavigate();
+
+    useEffect(()=>{
+        nav('/login',{replace:true});
+    },[nav]);
+
+    return null;
+}
+createRoot(document.getElementById("root")).render(
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>,
+);
