@@ -60,105 +60,63 @@ class AdminController
     // =========================================================
 
     public function users()
-    {
-        return \App\Models\User::where('role', 'user')
-            ->withCount('orders')
-            ->latest()
-            ->paginate(20);
+{
+    return \App\Models\User::where('role', 'user')
+        ->withCount('orders')
+        ->latest()
+        ->paginate(20);
+}
+
+public function products(Request $r)
+{
+    $q = Product::with(['category', 'images']);
+
+    if ($r->filled('search')) {
+        $search = $r->get('search');
+
+        $q->where(function ($query) use ($search) {
+            $query->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('sku', 'like', '%' . $search . '%');
+        });
     }
 
-    // =========================================================
-    // Products
-    // =========================================================
+    if ($r->get('filter') === 'low_stock') {
+        $q->whereColumn('stock', '<=', 'minimum_stock');
+    }
 
-    public function products(Request $r)
-    {
-        $q = Product::with([
-            'category',
-            'images'
+    if ($r->get('filter') === 'near_expiry') {
+    $q->whereNotNull('expiration_date')
+        ->whereDate('expiration_date', '<=', now()->addDays(30));
+}
+
+    return $q->latest()->paginate(20);
+}
+
+public function orders(Request $r)
+{
+    $q = Order::with([
+        'user',
+        'items.product',
+        'payments'
+    ]);
+
+    if ($r->boolean('pending_only')) {
+        $q->whereIn('status', [
+            'waiting_for_verification',
+            'waiting_for_check_verification'
         ]);
-
-        // فقط کالاهای با موجودی کم
-        if ($r->get('filter') === 'low_stock') {
-            $q->whereColumn(
-                'stock',
-                '<=',
-                'minimum_stock'
-            );
-        }
-
-        // فقط کالاهای نزدیک انقضا
-        if ($r->get('filter') === 'near_expiry') {
-            $q->whereNotNull('expiration_date')
-                ->whereDate(
-                    'expiration_date',
-                    '<=',
-                    now()->addDays(30)
-                )
-                ->whereDate(
-                    'expiration_date',
-                    '>=',
-                    now()
-                );
-        }
-
-        return $q
-            ->latest()
-            ->paginate(20);
     }
 
-    // =========================================================
-    // Orders
-    // =========================================================
+    return $q->latest()->paginate(20);
+}
 
-    public function orders(Request $r)
-    {
-        $q = Order::with([
-            'user',
-            'items.product',
-            'payments'
-        ]);
-
-        // فقط سفارش‌های در انتظار بررسی
-        if ($r->boolean('pending_only')) {
-            $q->whereIn('status', [
-                'waiting_for_verification',
-                'waiting_for_check_verification'
-            ]);
-        }
-
-        return $q
-            ->latest()
-            ->paginate(20);
-    }
-
-    // =========================================================
-    // Pending Payments
-    // =========================================================
-
-    public function pendingPayments()
-    {
-        return Payment::with('order.user')
-            ->where('status', 'waiting_verification')
-            ->latest()
-            ->paginate(20);
-    }
-
-    // =========================================================
-    // Approve Payment
-    // =========================================================
-
-    public function approvePayment(Request $r, Payment $payment)
-    {
-        $this->service->confirmPayment(
-            $payment,
-            $r->user()->id
-        );
-
-        return [
-            'message' => 'پرداخت تأیید و موجودی کسر شد.'
-        ];
-    }
+public function pendingPayments()
+{
+    return Payment::with('order.user')
+        ->where('status', 'waiting_verification')
+        ->latest()
+        ->paginate(20);
+}
 
     // =========================================================
     // Reject Payment
