@@ -556,3 +556,216 @@ footer .wrap {
     height: 64px;
   }
 }
+
+.dashboard-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.dashboard-card{background:var(--scondaryaccent);border:1px solid var(--primary);border-radius:18px;padding:24px;min-height:170px;transition:transform .18s,box-shadow .18s;box-shadow:0 7px 22px #00000010}
+.dashboard-card:hover{transform:translateY(-3px);box-shadow:0 10px 28px #00000018}
+.dashboard-card svg{color:var(--secondary);margin-bottom:10px}
+.dashboard-card h3{margin:4px 0 8px}
+.dashboard-card p{font-size:13px;line-height:1.8;margin:0}
+.role-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--secondary);color:#fff;padding:10px 16px;border-radius:12px;font-weight:700;font-size:13px}
+.role-badge.admin{background:var(--primary)}
+.dashboard-head p{margin:6px 0 0}
+
+@media (max-width:900px){.dashboard-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.dashboard-grid{grid-template-columns:1fr}.dashboard-head{align-items:flex-start;gap:15px;flex-direction:column}}
+.role-checks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0 18px}.role-checks label{background:#fff;border:1px solid #e4ebe7;border-radius:10px;padding:10px}.role-checks input{width:auto;margin-left:8px}
+/* =========================================
+   Dashboard Layout
+========================================= */
+
+.dashboard-layout {
+  display: flex;
+  min-height: 70vh;
+  gap: 24px;
+  margin: 30px auto;
+  max-width: 1400px;
+  padding: 0 20px;
+}
+
+
+/* =========================================
+   Dashboard Sidebar
+========================================= */
+
+.dashboard-sidebar {
+  width: 250px;
+  min-width: 250px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+  height: fit-content;
+}
+
+.sidebar-logo {
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+.dashboard-sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-sidebar .sidebar-link {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 13px 15px;
+
+  border-radius: 12px;
+
+  text-decoration: none;
+
+  color: #374151;
+
+  background: transparent;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.dashboard-sidebar .sidebar-link:hover {
+  background: #f3f4f6;
+  color: #111827;
+  transform: translateX(-2px);
+}
+
+.dashboard-sidebar .sidebar-link.active {
+  background: #111827;
+  color: #ffffff;
+}
+
+
+/* =========================================
+   Dashboard Content
+========================================= */
+
+.dashboard-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-header {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 22px 25px;
+  margin-bottom: 20px;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.dashboard-body {
+  width: 100%;
+}
+
+
+/* =========================================
+   Dashboard Cards
+========================================= */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.dashboard-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 22px;
+
+  box-shadow:
+    0 5px 20px rgba(0, 0, 0, 0.04);
+}
+
+.dashboard-card h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.dashboard-card p {
+  margin-bottom: 18px;
+  color: #6b7280;
+}
+
+
+/* =========================================
+   Role Notice
+========================================= */
+
+.role-notice {
+  margin-top: 20px;
+  padding: 18px 20px;
+
+  border-radius: 14px;
+
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+
+  line-height: 1.8;
+}
+
+
+/* =========================================
+   Responsive
+========================================= */
+
+@media (max-width: 900px) {
+
+  .dashboard-layout {
+    flex-direction: column;
+  }
+
+  .dashboard-sidebar {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-sidebar nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-sidebar .sidebar-link {
+    width: auto;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+@media (max-width: 600px) {
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-layout {
+    padding: 0 12px;
+  }
+
+  .dashboard-sidebar nav {
+    flex-direction: column;
+  }
+
+  .dashboard-sidebar .sidebar-link {
+    width: 100%;
+  }
+}

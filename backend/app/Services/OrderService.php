@@ -1,6 +1,6 @@
 <?php
 namespace App\Services;
-use App\Models\{Cart,Order,OrderItem,Payment,Product,InventoryTransaction,PreInvoice};
+use App\Models\{Cart,Order,OrderItem,Payment,Product,InventoryTransaction,PreInvoice,User};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 class OrderService {
@@ -9,7 +9,7 @@ class OrderService {
    $cart=Cart::with('items.product')->where('user_id',$userId)->first();
    if(!$cart || !$cart->items->count()) throw ValidationException::withMessages(['cart'=>'سبد خرید خالی است.']);
    $subtotal=0; $discount=0;
-   foreach($cart->items as $item){$p=$item->product; if(!$p->is_active || $item->quantity<$p->minimum_order_quantity || $item->quantity>$p->stock) throw ValidationException::withMessages(['cart'=>"موجودی یا حداقل سفارش {$p->name} صحیح نیست."]); $unit=$p->final_price; $subtotal += $p->price*$item->quantity; $discount += ($p->price-$unit)*$item->quantity;}
+   foreach($cart->items as $item){$p=$item->product; if(!$p->isAllowedFor(User::find($userId))) throw ValidationException::withMessages(['cart'=>"محصول {$p->name} برای Role شما مجاز نیست."]); if(!$p->is_active || $item->quantity<$p->minimum_order_quantity || $item->quantity>$p->stock) throw ValidationException::withMessages(['cart'=>"موجودی یا حداقل سفارش {$p->name} صحیح نیست."]); $unit=$p->final_price; $subtotal += $p->price*$item->quantity; $discount += ($p->price-$unit)*$item->quantity;}
    $order=Order::create(['user_id'=>$userId,'order_number'=>'VS-'.now()->format('YmdHis').'-'.random_int(100,999),'status'=>$data['payment_method']==='online'?'pending':'waiting_for_verification','payment_method'=>$data['payment_method'],'subtotal'=>$subtotal,'discount'=>$discount,'total'=>$subtotal-$discount,'shipping_address'=>$data['shipping_address']]);
    foreach($cart->items as $item){$p=$item->product; $unit=$p->final_price; OrderItem::create(['order_id'=>$order->id,'product_id'=>$p->id,'product_name'=>$p->name,'sku'=>$p->sku,'quantity'=>$item->quantity,'unit_price'=>$unit,'discount'=>($p->price-$unit)*$item->quantity,'total'=>$unit*$item->quantity]);}
    Payment::create(['order_id'=>$order->id,'method'=>$data['payment_method'],'amount'=>$order->total,'status'=>$data['payment_method']==='online'?'pending':'waiting_verification']);

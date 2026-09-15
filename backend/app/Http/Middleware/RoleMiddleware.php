@@ -1,12 +1,18 @@
 <?php
+
 namespace App\Http\Middleware;
+
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-class RoleMiddleware {
- public function handle(Request $request, Closure $next, ...$roles): Response {
-  $user=$request->user();
-  abort_unless($user && in_array($user->role,$roles,true),403,'دسترسی مجاز نیست.');
-  return $next($request);
- }
+
+class RoleMiddleware
+{
+    public function handle(Request $request, Closure $next, ...$roles): Response
+    {
+        $user=$request->user();
+        if(!$user) return response()->json(['message'=>'Unauthenticated.'],401);
+        if(!in_array($user->role,$roles,true)) return response()->json(['message'=>'شما اجازه دسترسی به این بخش را ندارید.','your_role'=>$user->role],403);
+        return $next($request);
+    }
 }
