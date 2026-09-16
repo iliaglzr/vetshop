@@ -1,795 +1,174 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { ROLE_LABELS } from '../utils/roles';
 
+const STATUSES = [
+  'pending', 'waiting_for_verification', 'waiting_for_check_verification',
+  'confirmed', 'processing', 'preparing', 'shipped', 'delivered', 'cancelled', 'rejected',
+];
 
-// =====================================================
-// ADMIN USERS
-// =====================================================
+const receiptUrl = (path) => {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `http://localhost:8000/storage/${path}`;
+};
 
 export function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(null);
 
   const loadUsers = async () => {
     try {
-      const response = await api.get('/admin/users');
-
-      setUsers(
-        response.data.data || response.data || []
-      );
-    } catch (error) {
-      console.error('Admin users error:', error);
-
-      alert(
-        error.response?.data?.message ||
-        'دریافت کاربران ناموفق بود.'
-      );
+      setLoading(true);
+      const r = await api.get('/admin/users');
+      setUsers(r.data.data || r.data || []);
+    } catch (e) {
+      alert(e.response?.data?.message || 'خطا در دریافت کاربران');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  useEffect(() => { loadUsers(); }, []);
 
-  const changeRole = async (id, role) => {
+  async function changeRole(id, role) {
     try {
-      await api.patch(
-        `/admin/users/${id}/role`,
-        { role }
-      );
-
+      setSaving(id);
+      await api.patch(`/admin/users/${id}/role`, { role });
       await loadUsers();
-
-    } catch (error) {
-      alert(
-        error.response?.data?.message ||
-        'تغییر نقش کاربر انجام نشد.'
-      );
+    } catch (e) {
+      alert(e.response?.data?.message || 'تغییر Role انجام نشد');
+    } finally {
+      setSaving(null);
     }
-  };
+  }
+
+  async function changeStatus(user) {
+    try {
+      setSaving(user.id);
+      await api.patch(`/admin/users/${user.id}/status`, { is_active: !user.is_active });
+      await loadUsers();
+    } catch (e) {
+      alert(e.response?.data?.message || 'تغییر وضعیت انجام نشد');
+    } finally {
+      setSaving(null);
+    }
+  }
 
   return (
     <section className="wrap section">
-
-      <h2>
-        مدیریت کاربران
-      </h2>
-
-      {loading ? (
-
-        <div className="empty">
-          در حال دریافت کاربران...
-        </div>
-
-      ) : users.length === 0 ? (
-
-        <div className="empty">
-          کاربری پیدا نشد.
-        </div>
-
-      ) : (
-
-        <div className="table">
-
-          {users.map((user) => (
-
-            <div
-              className="tr"
-              key={user.id}
-            >
-
-              <b>
-                {user.name}
-              </b>
-
-              <span>
-                {user.email}
-              </span>
-
-              <select
-                value={user.role}
-                onChange={(e) =>
-                  changeRole(
-                    user.id,
-                    e.target.value
-                  )
-                }
-              >
-
-                {Object.entries(
-                  ROLE_LABELS
-                ).map(
-                  ([value, label]) => (
-
-                    <option
-                      key={value}
-                      value={value}
-                    >
-                      {label}
-                    </option>
-
-                  )
-                )}
-
-              </select>
-
+      <div className="card">
+        <div className="card-body">
+          <div className="admin-section-header">
+            <div>
+              <h2 className="admin-section-title">مدیریت کاربران</h2>
+              <p>Role و وضعیت هر کاربر را مستقیماً از همین بخش تغییر بده.</p>
             </div>
+          </div>
 
-          ))}
-
+          {loading ? <p>در حال دریافت...</p> : users.length === 0 ? <p>کاربری پیدا نشد.</p> : (
+            <div className="table admin-table-scroll">
+              <div className="tr admin-table-header admin-table-min-1050">
+                <span>نام</span><span>ایمیل</span><span>موبایل</span><span>Role</span><span>سفارش‌ها</span><span>وضعیت</span><span>عملیات</span>
+              </div>
+              {users.map(u => (
+                <div className="tr admin-table-min-1050" key={u.id}>
+                  <span>{u.name}</span>
+                  <span>{u.email}</span>
+                  <span>{u.phone || '-'}</span>
+                  <span>
+                    <select value={u.role || 'user'} disabled={saving === u.id} onChange={e => changeRole(u.id, e.target.value)}>
+                      {Object.entries(ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </span>
+                  <span>{u.orders_count ?? 0}</span>
+                  <span>{u.is_active ? 'فعال' : 'غیرفعال'}</span>
+                  <span>
+                    <button className="btn small" disabled={saving === u.id} onClick={() => changeStatus(u)}>
+                      {u.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-
-      )}
-
+      </div>
     </section>
   );
 }
-
-
-// =====================================================
-// ADMIN PRODUCTS
-// =====================================================
 
 export function AdminProducts() {
-  const [products, setProducts] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const loadProducts = async () => {
-    try {
-
-      const response = await api.get(
-        '/products',
-        {
-          params: {
-            per_page: 100,
-          },
-        }
-      );
-
-      setProducts(
-        response.data.data || []
-      );
-
-    } catch (error) {
-
-      console.error(
-        'Admin products error:',
-        error
-      );
-
-      alert(
-        error.response?.data?.message ||
-        'دریافت محصولات ناموفق بود.'
-      );
-
-    } finally {
-
-      setLoading(false);
-
-    }
+    try { setLoading(true); const r = await api.get('/admin/products-list', { params: { per_page: 100, ...(search ? { search } : {}) } }); setProducts(r.data.data || []); }
+    catch (e) { alert(e.response?.data?.message || 'خطا در دریافت محصولات'); }
+    finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  return (
-    <section className="wrap section">
-
-      <div className="dashboard-head">
-
-        <h2>
-          مدیریت محصولات
-        </h2>
-
-      </div>
-
-      {loading ? (
-
-        <div className="empty">
-          در حال دریافت محصولات...
-        </div>
-
-      ) : products.length === 0 ? (
-
-        <div className="empty">
-          محصولی پیدا نشد.
-        </div>
-
-      ) : (
-
-        <div className="table">
-
-          {products.map((product) => {
-
-            const roles =
-              product.allowed_roles ||
-              product.roles?.map(
-                (role) => role.role
-              ) ||
-              [];
-
-            return (
-
-              <div
-                className="tr"
-                key={product.id}
-              >
-
-                <b>
-                  {product.name}
-                </b>
-
-                <span>
-                  موجودی:
-                  {' '}
-                  {product.stock}
-                </span>
-
-                <span>
-                  {roles.length
-                    ? roles
-                        .map(
-                          (role) =>
-                            ROLE_LABELS[role] ||
-                            role
-                        )
-                        .join('، ')
-                    : 'بدون دسترسی'}
-                </span>
-
-                <a
-                  href={
-                    `/admin/products/${product.id}`
-                  }
-                >
-                  ویرایش
-                </a>
-
-              </div>
-
-            );
-
-          })}
-
-        </div>
-
-      )}
-
-    </section>
-  );
+  useEffect(() => { loadProducts(); }, []);
+  return <section className="wrap section"><div className="card"><div className="card-body"><div className="admin-section-header"><h2 className="admin-section-title">مدیریت محصولات</h2><Link className="btn" to="/admin/products/new">+ افزودن محصول</Link></div><div className="admin-product-search"><input className="admin-product-search-input" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') loadProducts(); }} placeholder="جستجوی نام یا SKU..."/><button className="btn" onClick={loadProducts}>جستجو</button></div>{loading ? <p>در حال دریافت...</p> : products.length === 0 ? <p>محصولی پیدا نشد.</p> : <div className="table admin-table-scroll"><div className="tr admin-table-header admin-table-min-1050"><span>تصویر</span><span>نام</span><span>SKU</span><span>موجودی</span><span>Roleهای مجاز</span><span>تاریخ انقضا</span><span>عملیات</span></div>{products.map(p => <div className="tr admin-table-min-1050" key={p.id}><span>{p.main_image ? <img className="admin-product-image" src={p.main_image} alt={p.name} /> : '-'}</span><span>{p.name}</span><span>{p.sku}</span><span>{p.stock}</span><span>{p.allowed_roles?.length ? p.allowed_roles.map(r => ROLE_LABELS[r] || r).join('، ') : 'همه کاربران'}</span><span>{p.expiration_date || '-'}</span><span><Link className="btn" to={`/admin/products/${p.id}`}>ویرایش</Link></span></div>)}</div>}</div></div></section>;
 }
-
-
-// =====================================================
-// ADMIN INVENTORY
-// =====================================================
 
 export function AdminInventory() {
-
-  const [products, setProducts] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const loadProducts = async () => {
-
-    try {
-
-      const response = await api.get(
-        '/products',
-        {
-          params: {
-            per_page: 100,
-          },
-        }
-      );
-
-      setProducts(
-        response.data.data || []
-      );
-
-    } catch (error) {
-
-      console.error(
-        'Inventory error:',
-        error
-      );
-
-      alert(
-        error.response?.data?.message ||
-        'دریافت موجودی ناموفق بود.'
-      );
-
-    } finally {
-
-      setLoading(false);
-
-    }
+    try { setLoading(true); const r = await api.get('/admin/products-list', { params: { per_page: 100 } }); setProducts(r.data.data || []); }
+    catch (e) { alert(e.response?.data?.message || 'خطا در دریافت موجودی'); }
+    finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const adjustInventory = async (
-    product
-  ) => {
-
-    const quantity = prompt(
-      `تغییر موجودی ${product.name}\nمثلاً 10 یا -5`
-    );
-
-    if (quantity === null) {
-      return;
-    }
-
-    const number =
-      Number(quantity);
-
-    if (
-      Number.isNaN(number) ||
-      number === 0
-    ) {
-
-      alert(
-        'مقدار وارد شده معتبر نیست.'
-      );
-
-      return;
-    }
-
-    const reason = prompt(
-      'دلیل تغییر موجودی:'
-    );
-
-    if (!reason) {
-      return;
-    }
-
-    try {
-
-      await api.post(
-        `/admin/inventory/${product.id}`,
-        {
-          quantity: number,
-          reason,
-        }
-      );
-
-      await loadProducts();
-
-    } catch (error) {
-
-      alert(
-        error.response?.data?.message ||
-        'تغییر موجودی انجام نشد.'
-      );
-
-    }
-  };
-
-  return (
-    <section className="wrap section">
-
-      <h2>
-        مدیریت انبار
-      </h2>
-
-      {loading ? (
-
-        <div className="empty">
-          در حال دریافت موجودی...
-        </div>
-
-      ) : products.length === 0 ? (
-
-        <div className="empty">
-          محصولی پیدا نشد.
-        </div>
-
-      ) : (
-
-        <div className="table">
-
-          {products.map((product) => (
-
-            <div
-              className="tr"
-              key={product.id}
-            >
-
-              <b>
-                {product.name}
-              </b>
-
-              <span>
-                موجودی:
-                {' '}
-                {product.stock}
-              </span>
-
-              <button
-                type="button"
-                className="btn small"
-                onClick={() =>
-                  adjustInventory(product)
-                }
-              >
-                تغییر موجودی
-              </button>
-
-            </div>
-
-          ))}
-
-        </div>
-
-      )}
-
-    </section>
-  );
+  useEffect(() => { loadProducts(); }, []);
+  async function adjust(product) {
+    const raw = window.prompt(`تغییر موجودی ${product.name} (مثلاً 10 یا -5)`);
+    if (raw === null) return;
+    const quantity = Number(raw);
+    if (!Number.isInteger(quantity)) return alert('مقدار باید عدد صحیح باشد.');
+    const reason = window.prompt('دلیل تغییر موجودی:');
+    if (!reason) return;
+    try { await api.post(`/admin/inventory/${product.id}`, { quantity, reason }); await loadProducts(); }
+    catch (e) { alert(e.response?.data?.message || 'خطا در تغییر موجودی'); }
+  }
+  return <section className="wrap section"><div className="card"><div className="card-body"><h2>مدیریت انبار</h2>{loading ? <p>در حال دریافت...</p> : <div className="table admin-table-scroll"><div className="tr admin-table-header"><span>تصویر</span><span>محصول</span><span>موجودی</span><span>حداقل</span><span>تاریخ انقضا</span><span>عملیات</span></div>{products.map(p => <div className="tr" key={p.id}><span>{p.main_image ? <img className="admin-product-image" src={p.main_image} alt={p.name} /> : '-'}</span><span>{p.name}</span><span>{p.stock}</span><span>{p.minimum_stock}</span><span>{p.expiration_date || '-'}</span><span><button className="btn small" onClick={() => adjust(p)}>تغییر موجودی</button></span></div>)}</div>}</div></div></section>;
 }
-
-
-// =====================================================
-// ADMIN ORDERS
-// =====================================================
 
 export function AdminOrders() {
-
-  const [orders, setOrders] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const statuses = [
-    'pending',
-    'waiting_for_verification',
-    'waiting_for_check_verification',
-    'confirmed',
-    'processing',
-    'preparing',
-    'shipped',
-    'delivered',
-    'cancelled',
-    'rejected',
-  ];
-
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const loadOrders = async () => {
-
-    try {
-
-      const response =
-        await api.get(
-          '/admin/orders'
-        );
-
-      setOrders(
-        response.data.data || []
-      );
-
-    } catch (error) {
-
-      console.error(
-        'Admin orders error:',
-        error
-      );
-
-      alert(
-        error.response?.data?.message ||
-        'دریافت سفارش‌ها ناموفق بود.'
-      );
-
-    } finally {
-
-      setLoading(false);
-
-    }
+    try { setLoading(true); const r = await api.get('/admin/orders'); setOrders(r.data.data || []); }
+    catch (e) { alert(e.response?.data?.message || 'خطا در دریافت سفارش‌ها'); }
+    finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-  const changeStatus = async (
-    id,
-    status
-  ) => {
-
-    try {
-
-      await api.patch(
-        `/admin/orders/${id}`,
-        { status }
-      );
-
-      await loadOrders();
-
-    } catch (error) {
-
-      alert(
-        error.response?.data?.message ||
-        'تغییر وضعیت سفارش انجام نشد.'
-      );
-
-    }
-  };
-
-  return (
-    <section className="wrap section">
-
-      <h2>
-        مدیریت سفارشات
-      </h2>
-
-      {loading ? (
-
-        <div className="empty">
-          در حال دریافت سفارش‌ها...
-        </div>
-
-      ) : orders.length === 0 ? (
-
-        <div className="empty">
-          سفارشی وجود ندارد.
-        </div>
-
-      ) : (
-
-        <div className="table">
-
-          {orders.map((order) => (
-
-            <div
-              className="tr"
-              key={order.id}
-            >
-
-              <b>
-                {order.order_number}
-              </b>
-
-              <span>
-                {order.user?.name ||
-                  '---'}
-              </span>
-
-              <span>
-                {order.total}
-              </span>
-
-              <select
-                value={order.status}
-                onChange={(e) =>
-                  changeStatus(
-                    order.id,
-                    e.target.value
-                  )
-                }
-              >
-
-                {statuses.map(
-                  (status) => (
-
-                    <option
-                      key={status}
-                      value={status}
-                    >
-                      {status}
-                    </option>
-
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-          ))}
-
-        </div>
-
-      )}
-
-    </section>
-  );
+  useEffect(() => { loadOrders(); }, []);
+  async function changeStatus(id, status) {
+    try { await api.patch(`/admin/orders/${id}`, { status }); await loadOrders(); }
+    catch (e) { alert(e.response?.data?.message || 'تغییر وضعیت انجام نشد'); }
+  }
+  return <section className="wrap section"><div className="card"><div className="card-body"><h2>مدیریت سفارش‌ها</h2>{loading ? <p>در حال دریافت...</p> : orders.length === 0 ? <p>سفارشی وجود ندارد.</p> : <div className="table admin-table-scroll"><div className="tr admin-table-header admin-table-min-900"><span>شماره</span><span>مشتری</span><span>مبلغ</span><span>پرداخت</span><span>وضعیت</span><span>عملیات</span></div>{orders.map(o => <div className="tr admin-table-min-900" key={o.id}><span>{o.order_number}</span><span>{o.user?.name || '-'}</span><span>{o.total}</span><span>{o.payments?.at(-1)?.status || '-'}</span><span><select value={o.status} onChange={e => changeStatus(o.id, e.target.value)}>{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></span><span>-</span></div>)}</div>}</div></div></section>;
 }
 
-
-// =====================================================
-// ADMIN PAYMENTS
-// =====================================================
-
 export function AdminPayments() {
-
-  const [payments, setPayments] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const loadPayments = async () => {
-
-    try {
-
-      const response =
-        await api.get(
-          '/admin/payments/pending'
-        );
-
-      setPayments(
-        response.data.data || []
-      );
-
-    } catch (error) {
-
-      console.error(
-        'Admin payments error:',
-        error
-      );
-
-      alert(
-        error.response?.data?.message ||
-        'دریافت پرداخت‌ها ناموفق بود.'
-      );
-
-    } finally {
-
-      setLoading(false);
-
-    }
+    try { setLoading(true); const r = await api.get('/admin/payments/pending'); setPayments(r.data.data || []); }
+    catch (e) { alert(e.response?.data?.message || 'خطا در دریافت پرداخت‌ها'); }
+    finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    loadPayments();
-  }, []);
-
-  const approvePayment = async (
-    id
-  ) => {
-
-    try {
-
-      await api.post(
-        `/admin/payments/${id}/approve`
-      );
-
-      await loadPayments();
-
-    } catch (error) {
-
-      alert(
-        error.response?.data?.message ||
-        'تأیید پرداخت انجام نشد.'
-      );
-
-    }
-  };
-
-  const rejectPayment = async (
-    id
-  ) => {
-
-    const reason = prompt(
-      'دلیل رد پرداخت:'
-    );
-
-    if (!reason) {
-      return;
-    }
-
-    try {
-
-      await api.post(
-        `/admin/payments/${id}/reject`,
-        {
-          reason,
-        }
-      );
-
-      await loadPayments();
-
-    } catch (error) {
-
-      alert(
-        error.response?.data?.message ||
-        'رد پرداخت انجام نشد.'
-      );
-
-    }
-  };
-
-  return (
-    <section className="wrap section">
-
-      <h2>
-        پرداخت‌های در انتظار
-      </h2>
-
-      {loading ? (
-
-        <div className="empty">
-          در حال دریافت پرداخت‌ها...
-        </div>
-
-      ) : payments.length === 0 ? (
-
-        <div className="empty">
-          پرداختی در انتظار بررسی نیست.
-        </div>
-
-      ) : (
-
-        <div className="table">
-
-          {payments.map((payment) => (
-
-            <div
-              className="tr"
-              key={payment.id}
-            >
-
-              <b>
-                {
-                  payment.order
-                    ?.order_number ||
-                  '---'
-                }
-              </b>
-
-              <span>
-                {
-                  payment.order
-                    ?.user?.name ||
-                  '---'
-                }
-              </span>
-
-              <span>
-                {payment.amount}
-              </span>
-
-              <button
-                type="button"
-                className="btn small"
-                onClick={() =>
-                  approvePayment(
-                    payment.id
-                  )
-                }
-              >
-                تأیید
-              </button>
-
-              <button
-                type="button"
-                className="ghost"
-                onClick={() =>
-                  rejectPayment(
-                    payment.id
-                  )
-                }
-              >
-                رد
-              </button>
-
-            </div>
-
-          ))}
-
-        </div>
-
-      )}
-
-    </section>
-  );
+  useEffect(() => { loadPayments(); }, []);
+  async function approve(id) {
+    try { await api.post(`/admin/payments/${id}/approve`); await loadPayments(); }
+    catch (e) { alert(e.response?.data?.message || 'تأیید پرداخت انجام نشد'); }
+  }
+  async function reject(id) {
+    const reason = window.prompt('دلیل رد پرداخت:');
+    if (!reason) return;
+    try { await api.post(`/admin/payments/${id}/reject`, { reason }); await loadPayments(); }
+    catch (e) { alert(e.response?.data?.message || 'رد پرداخت انجام نشد'); }
+  }
+  return <section className="wrap section"><div className="card"><div className="card-body"><h2>پرداخت‌های در انتظار</h2>{loading ? <p>در حال دریافت...</p> : payments.length === 0 ? <p>پرداختی برای بررسی وجود ندارد.</p> : <div className="admin-grid">{payments.map(p => { const image = receiptUrl(p.receipt_path); return <article className="card admin-order-card" key={p.id}><div className="card-body"><h3>سفارش {p.order?.order_number || `#${p.order_id}`}</h3><p>مشتری: {p.order?.user?.name || '-'}</p><p>مبلغ: {p.amount}</p><p>روش: {p.method || '-'}</p>{image && <div className="admin-receipt"><p>رسید / تصویر چک:</p><a href={image} target="_blank" rel="noreferrer"><img src={image} alt="رسید پرداخت" className="admin-receipt-image" /></a></div>}<div className="admin-product-actions"><button className="btn" onClick={() => approve(p.id)}>تأیید پرداخت</button><button className="btn btn-danger" onClick={() => reject(p.id)}>رد</button></div></div></article>; })}</div>}</div></div></section>;
 }

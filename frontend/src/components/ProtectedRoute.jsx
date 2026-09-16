@@ -2,33 +2,13 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dashboardPath } from '../utils/roles';
 
-export default function ProtectedRoute({ roles = [] }) {
-  const { user, isLoggedIn } = useAuth();
+export default function ProtectedRoute({ roles }) {
+  const { user, isLoggedIn, booting } = useAuth();
   const location = useLocation();
 
-  // اگر لاگین نکرده باشد
-  if (!isLoggedIn || !user) {
-    return (
-      <Navigate
-        to="/login"
-        replace
-        state={{
-          from: location.pathname,
-        }}
-      />
-    );
-  }
+  if (booting) return <div className="auth"><div className="panel center">در حال بررسی حساب...</div></div>;
 
-  // اگر Role اجازه ورود نداشته باشد
-  if (roles.length > 0 && !roles.includes(user.role)) {
-    return (
-      <Navigate
-        to={dashboardPath(user.role)}
-        replace
-      />
-    );
-  }
-
-  // اجازه ورود دارد
+  if (!isLoggedIn) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (roles?.length && !roles.includes(user.role)) return <Navigate to={dashboardPath(user.role)} replace />;
   return <Outlet />;
 }

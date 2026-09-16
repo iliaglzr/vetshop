@@ -14,55 +14,12 @@ export const ROLE_LABELS = {
   admin: 'مدیر سیستم',
 };
 
-export const ROLE_DASHBOARDS = {
-  user: '/dashboard',
-  pet_shop: '/dashboard/pet-shop',
-  pharmacy: '/dashboard/pharmacy',
-  vaccination: '/dashboard/vaccination',
-  admin: '/admin',
-};
-
-export const ROLE_PRODUCT_ACCESS = {
-  user: ['مکمل‌ها', 'تجهیزات'],
-
-  pet_shop: [
-    'مکمل‌ها',
-    'تجهیزات',
-  ],
-
-  pharmacy: [
-    'داروها',
-    'مکمل‌ها',
-    'تجهیزات',
-  ],
-
-  vaccination: [
-    'واکسن‌ها',
-    'تجهیزات',
-  ],
-
-  admin: [
-    'داروها',
-    'مکمل‌ها',
-    'تجهیزات',
-    'واکسن‌ها',
-  ],
-};
-
 export function dashboardPath(role) {
-  return ROLE_DASHBOARDS[role] || '/dashboard';
-}
-
-export function hasRole(user, roles = []) {
-  if (!user) return false;
-
-  if (!roles.length) {
-    return true;
+  switch (role) {
+    case ROLES.ADMIN: return '/admin';
+    case ROLES.PET_SHOP: return '/dashboard/pet-shop';
+    case ROLES.PHARMACY: return '/dashboard/pharmacy';
+    case ROLES.VACCINATION: return '/dashboard/vaccination';
+    default: return '/dashboard';
   }
-
-  return roles.includes(user.role);
-}
-
-export function isAdmin(user) {
-  return user?.role === ROLES.ADMIN;
 }

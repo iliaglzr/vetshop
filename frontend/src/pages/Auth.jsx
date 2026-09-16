@@ -1,332 +1,78 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { dashboardPath } from '../utils/roles';
+import { dashboardPath as getDashboardPath } from '../utils/roles';
 
-
-// =====================================================
-// LOGIN
-// =====================================================
-
-export function Login() {
-  const navigate = useNavigate();
-
-  const {
-    login,
-  } = useAuth();
-
-  const [form, setForm] = useState({
-    email: '',
-    password: '',
-  });
-
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    setError('');
-    setLoading(true);
-
-    try {
-      const user = await login(
-        form.email,
-        form.password
-      );
-
-      // انتقال به داشبورد Role
-      navigate(
-        dashboardPath(user.role),
-        { replace: true }
-      );
-
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err?.response?.data?.message ||
-        'ایمیل یا رمز عبور اشتباه است.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="auth-page">
-
-      <div className="auth-card">
-
-        <h1>ورود به VetShop</h1>
-
-        {error && (
-          <div className="error-message">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-
-          <div className="form-group">
-            <label>
-              ایمیل
-            </label>
-
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label>
-              رمز عبور
-            </label>
-
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="btn"
-            disabled={loading}
-          >
-            {loading
-              ? 'در حال ورود...'
-              : 'ورود'}
-          </button>
-
-        </form>
-
-        <p>
-          حساب کاربری ندارید؟
-          {' '}
-
-          <Link to="/register">
-            ثبت‌نام کنید
-          </Link>
-        </p>
-
-      </div>
-
-    </div>
-  );
+function apiError(error, fallback) {
+  const errors = error.response?.data?.errors;
+  if (errors) return Object.values(errors).flat().join('\n');
+  return error.response?.data?.message || fallback;
 }
 
+function AuthForm({ title, onSubmit, children }) {
+  return <section className="auth"><form className="panel" onSubmit={onSubmit}><span className="eyebrow">VetShop</span><h2>{title}</h2>{children}</form></section>;
+}
 
-// =====================================================
-// REGISTER
-// =====================================================
+export function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const nav = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+
+  async function submit(e) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try {
+      const u = await login(email.trim(), password);
+      const from = location.state?.from;
+      nav(from || getDashboardPath(u.role), { replace: true });
+    } catch (error) {
+      alert(apiError(error, 'ورود ناموفق بود. ایمیل و رمز عبور را بررسی کنید.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <AuthForm title="ورود به حساب" onSubmit={submit}>
+    <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="ایمیل" autoComplete="email" required />
+    <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="رمز عبور" autoComplete="current-password" required />
+    <button className="btn full" disabled={busy}>{busy ? 'در حال ورود...' : 'ورود'}</button>
+    <p>حساب ندارید؟ <Link to="/register">ثبت‌نام</Link></p>
+  </AuthForm>;
+}
 
 export function Register() {
-  const navigate = useNavigate();
+  const [f, setF] = useState({ name:'', email:'', phone:'', password:'', password_confirmation:'' });
+  const [busy, setBusy] = useState(false);
+  const nav = useNavigate();
+  const { register } = useAuth();
 
-  const {
-    register,
-  } = useAuth();
-
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    password: '',
-    password_confirmation: '',
-  });
-
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleSubmit = async (e) => {
+  async function submit(e) {
     e.preventDefault();
-
-    setError('');
-
-    // بررسی رمز عبور
-    if (
-      form.password !==
-      form.password_confirmation
-    ) {
-      setError(
-        'رمز عبور و تکرار آن یکسان نیستند.'
-      );
-
+    if (busy) return;
+    if (f.password !== f.password_confirmation) {
+      alert('تکرار رمز عبور با رمز عبور یکسان نیست.');
       return;
     }
-
-    setLoading(true);
-
+    setBusy(true);
     try {
-      const user = await register(form);
-
-      // کاربر جدید همیشه user است
-      navigate(
-        dashboardPath(user.role),
-        { replace: true }
-      );
-
-    } catch (err) {
-      console.error(err);
-
-      const errors =
-        err?.response?.data?.errors;
-
-      if (errors) {
-        const firstError =
-          Object.values(errors)
-            .flat()
-            .at(0);
-
-        setError(
-          firstError ||
-          'اطلاعات وارد شده صحیح نیست.'
-        );
-      } else {
-        setError(
-          err?.response?.data?.message ||
-          'ثبت‌نام انجام نشد.'
-        );
-      }
+      const u = await register({ ...f, email: f.email.trim() });
+      nav(getDashboardPath(u.role), { replace: true });
+    } catch (error) {
+      alert(apiError(error, 'ثبت‌نام ناموفق بود. اطلاعات واردشده را بررسی کنید.'));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
-  };
+  }
 
-  return (
-    <div className="auth-page">
-
-      <div className="auth-card">
-
-        <h1>ثبت‌نام در VetShop</h1>
-
-        {error && (
-          <div className="error-message">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-
-          <div className="form-group">
-            <label>
-              نام
-            </label>
-
-            <input
-              type="text"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label>
-              ایمیل
-            </label>
-
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label>
-              شماره تلفن
-            </label>
-
-            <input
-              type="text"
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>
-              رمز عبور
-            </label>
-
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              required
-              minLength={8}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>
-              تکرار رمز عبور
-            </label>
-
-            <input
-              type="password"
-              name="password_confirmation"
-              value={
-                form.password_confirmation
-              }
-              onChange={handleChange}
-              required
-              minLength={8}
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="btn"
-            disabled={loading}
-          >
-            {loading
-              ? 'در حال ثبت‌نام...'
-              : 'ثبت‌نام'}
-          </button>
-
-        </form>
-
-        <p>
-          قبلاً ثبت‌نام کرده‌اید؟
-          {' '}
-
-          <Link to="/login">
-            ورود
-          </Link>
-        </p>
-
-      </div>
-
-    </div>
-  );
+  const labels = { name:'نام و نام خانوادگی', email:'ایمیل', phone:'شماره تماس', password:'رمز عبور', password_confirmation:'تکرار رمز عبور' };
+  return <AuthForm title="ساخت حساب" onSubmit={submit}>
+    {Object.keys(f).map(k => <input key={k} value={f[k]} onChange={e => setF({ ...f, [k]: e.target.value })} type={k.includes('password') ? 'password' : k === 'email' ? 'email' : 'text'} placeholder={labels[k]} autoComplete={k === 'password_confirmation' ? 'new-password' : k} required={k !== 'phone'} />)}
+    <p className="hint">حساب جدید ابتدا کاربر عادی است؛ ادمین می‌تواند بعداً Role آن را تغییر دهد.</p>
+    <button className="btn full" disabled={busy}>{busy ? 'در حال ثبت‌نام...' : 'ثبت‌نام'}</button>
+    <p>حساب دارید؟ <Link to="/login">ورود</Link></p>
+  </AuthForm>;
 }

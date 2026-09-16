@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { dashboardPath } from '../utils/roles';
 
@@ -13,128 +6,61 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem('user') || 'null'
-      );
-    } catch {
-      return null;
-    }
+    try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
   });
+  const [booting, setBooting] = useState(!!localStorage.getItem('token'));
 
-  // -------------------------
-  // Login
-  // -------------------------
   const login = async (email, password) => {
-    const { data } = await api.post('/auth/login', {
-      email,
-      password,
-    });
-
+    const { data } = await api.post('/auth/login', { email, password });
     localStorage.setItem('token', data.token);
-    localStorage.setItem(
-      'user',
-      JSON.stringify(data.user)
-    );
-
+    localStorage.setItem('user', JSON.stringify(data.user));
     setUser(data.user);
-
     return data.user;
   };
 
-  // -------------------------
-  // Register
-  // -------------------------
   const register = async (payload) => {
-    const { data } = await api.post(
-      '/auth/register',
-      payload
-    );
-
+    const { data } = await api.post('/auth/register', payload);
     localStorage.setItem('token', data.token);
-    localStorage.setItem(
-      'user',
-      JSON.stringify(data.user)
-    );
-
+    localStorage.setItem('user', JSON.stringify(data.user));
     setUser(data.user);
-
     return data.user;
   };
 
-  // -------------------------
-  // Logout
-  // -------------------------
   const logout = async () => {
-    try {
-      if (localStorage.getItem('token')) {
-        await api.post('/auth/logout');
-      }
-    } catch (error) {
-      console.log('Logout API error:', error);
-    }
-
+    try { if (localStorage.getItem('token')) await api.post('/auth/logout'); } catch {}
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-
     setUser(null);
   };
 
-  // -------------------------
-  // Check current user
-  // -------------------------
   useEffect(() => {
     const token = localStorage.getItem('token');
-
     if (!token) {
+      setBooting(false);
       return;
     }
 
-    api
-      .get('/me')
-      .then(({ data }) => {
-        localStorage.setItem(
-          'user',
-          JSON.stringify(data)
-        );
-
-        setUser(data);
-      })
-      .catch(() => {
-        logout();
-      });
+    api.get('/me').then(({ data }) => {
+      localStorage.setItem('user', JSON.stringify(data));
+      setUser(data);
+    }).catch(() => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+    }).finally(() => setBooting(false));
   }, []);
 
-  // -------------------------
-  // Context value
-  // -------------------------
-  const value = useMemo(
-    () => ({
-      user,
+  const value = useMemo(() => ({
+    user,
+    login,
+    register,
+    logout,
+    isLoggedIn: !!user && !!localStorage.getItem('token'),
+    booting,
+    dashboardPath: dashboardPath(user?.role),
+  }), [user, booting]);
 
-      login,
-
-      register,
-
-      logout,
-
-      isLoggedIn:
-        !!user &&
-        !!localStorage.getItem('token'),
-
-      // مسیر داشبورد کاربر
-      dashboardPath: dashboardPath(
-        user?.role
-      ),
-    }),
-    [user]
-  );
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

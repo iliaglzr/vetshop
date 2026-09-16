@@ -3,9 +3,11 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\{AuthController,ProductController,CartController,OrderController,AdminController,AdminUserController};
 
-Route::get('/products',[ProductController::class,'index']);
-Route::get('/products/{product}',[ProductController::class,'show']);
-Route::get('/categories',[ProductController::class,'categories']);
+Route::middleware('auth:sanctum')->group(function(){
+    Route::get('/products',[ProductController::class,'index']);
+    Route::get('/products/{product}',[ProductController::class,'show']);
+    Route::get('/categories',[ProductController::class,'categories']);
+});
 Route::post('/auth/register',[AuthController::class,'register']);
 Route::post('/auth/login',[AuthController::class,'login']);
 
@@ -24,6 +26,8 @@ Route::middleware('auth:sanctum')->group(function(){
     Route::middleware('role:admin')->prefix('admin')->group(function(){
         Route::get('/dashboard',[AdminController::class,'dashboard']);
         Route::apiResource('/products',ProductController::class);
+        Route::get('/products-list',[AdminController::class,'products']);
+        Route::post('/products/{product}/images',[ProductController::class,'uploadImage']);
         Route::get('/orders',[AdminController::class,'orders']);
         Route::patch('/orders/{order}',[AdminController::class,'updateOrder']);
         Route::get('/payments/pending',[AdminController::class,'pendingPayments']);
@@ -32,5 +36,6 @@ Route::middleware('auth:sanctum')->group(function(){
         Route::post('/inventory/{product}',[AdminController::class,'adjustInventory']);
         Route::get('/users',[AdminUserController::class,'index']);
         Route::patch('/users/{user}/role',[AdminUserController::class,'updateRole']);
+        Route::patch('/users/{user}/status',[AdminUserController::class,'updateStatus']);
     });
 });
