@@ -821,13 +821,7 @@ footer span {
     grid-template-columns: 1fr;
   }
 }
-.btn-danger {
-  background: #c62828;
-  color: #fff;
-  border: none;
-  padding: 10px 18px;
-  border-radius: 8px;
-}
+
 /* ===================== Refactored Admin / Dynamic UI ===================== */
 .admin-stat-card {
   cursor: default;
@@ -876,13 +870,19 @@ footer span {
 
 .admin-table-header {
   font-weight: 700;
+  color: var(--primary);
+  background: var(--surface-tint);
 }
 
-.admin-table-min-900 {
+/* جدول کاربران: نام‌کاربری، نام، ایمیل، موبایل، نقش، سفارش‌ها، تاریخ = ۷ ستون */
+.tr.admin-table-min-900 {
+  grid-template-columns: 1fr 1fr 1.4fr 1fr 0.8fr 0.8fr 1fr;
   min-width: 900px;
 }
 
-.admin-table-min-1050 {
+/* جدول محصولات: تصویر، نام، SKU، قیمت، تخفیف، موجودی، وضعیت، عملیات = ۸ ستون */
+.tr.admin-table-min-1050 {
+  grid-template-columns: 70px 1.4fr 0.9fr 0.9fr 0.7fr 0.7fr 0.8fr 0.9fr;
   min-width: 1050px;
 }
 
