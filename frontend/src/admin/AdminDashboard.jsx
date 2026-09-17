@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Package } from 'lucide-react';
-import { api } from '../api';
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { Package } from "lucide-react";
+import { api } from "../api";
 
 const money = (n) =>
-  new Intl.NumberFormat('fa-IR').format(Math.round(n || 0)) + ' تومان';
+  new Intl.NumberFormat("fa-IR").format(Math.round(n || 0)) + " تومان";
 
 function getPayment(order) {
   if (!order?.payments?.length) return null;
@@ -19,43 +19,167 @@ function getReceiptUrl(payment) {
 
 function translateStatus(status) {
   const statuses = {
-    pending: 'در انتظار',
-    waiting_for_verification: 'در انتظار تأیید پرداخت',
-    waiting_for_check_verification: 'در انتظار تأیید چک',
-    confirmed: 'تأیید شده',
-    processing: 'در حال پردازش',
-    preparing: 'در حال آماده‌سازی',
-    shipped: 'ارسال شده',
-    delivered: 'تحویل داده شده',
-    cancelled: 'لغو شده',
-    rejected: 'رد شده',
+    pending: "در انتظار",
+    waiting_for_verification: "در انتظار تأیید پرداخت",
+    waiting_for_check_verification: "در انتظار تأیید چک",
+    confirmed: "تأیید شده",
+    processing: "در حال پردازش",
+    preparing: "در حال آماده‌سازی",
+    shipped: "ارسال شده",
+    delivered: "تحویل داده شده",
+    cancelled: "لغو شده",
+    rejected: "رد شده",
   };
-  return statuses[status] || status || '-';
+
+  return statuses[status] || status || "-";
 }
 
 function translatePaymentMethod(method) {
-  const methods = { online: 'پرداخت آنلاین', bank_transfer: 'واریز بانکی', check: 'چک' };
-  return methods[method] || method || '-';
+  const methods = {
+    online: "پرداخت آنلاین",
+    bank_transfer: "واریز بانکی",
+    check: "چک",
+  };
+
+  return methods[method] || method || "-";
 }
 
 function formatDate(date) {
-  if (!date) return '-';
-  try { return new Date(date).toLocaleDateString('fa-IR'); }
-  catch { return date; }
+  if (!date) return "-";
+
+  try {
+    return new Date(date).toLocaleDateString("fa-IR");
+  } catch {
+    return date;
+  }
 }
 
 function getProductImage(product) {
   if (product?.main_image) return product.main_image;
+
   const image = product?.images?.[0];
+
   return image?.url || image?.image || image?.path || null;
 }
 
+/* =========================================================
+   Pagination Component
+========================================================= */
+
+function AdminPagination({ meta, loading, onPageChange }) {
+  if (!meta || meta.last_page <= 1) {
+    return null;
+  }
+
+  const current = meta.current_page;
+  const last = meta.last_page;
+
+  function getPages() {
+    const pages = [];
+
+    if (last <= 3) {
+      for (let i = 1; i <= last; i++) {
+        pages.push(i);
+      }
+
+      return pages;
+    }
+
+    if (current <= 2) {
+      pages.push(1);
+      pages.push(2);
+      pages.push(3);
+
+      if (last > 4) {
+        pages.push("...");
+      }
+
+      pages.push(last);
+
+      return pages;
+    }
+
+    if (current >= last - 1) {
+      pages.push(1);
+
+      if (last > 4) {
+        pages.push("...");
+      }
+
+      pages.push(last - 2);
+      pages.push(last - 1);
+      pages.push(last);
+
+      return pages;
+    }
+
+    pages.push(1);
+    pages.push("...");
+    pages.push(current);
+    pages.push("...");
+    pages.push(last);
+
+    return pages;
+  }
+
+  return (
+    <div className="pagination admin-pagination">
+      {/* Previous */}
+      <button
+        className="pagination-btn arrow"
+        disabled={current <= 1 || loading}
+        onClick={() => onPageChange(current - 1)}
+        aria-label="صفحه قبل"
+        title="صفحه قبل"
+      >
+        ‹
+      </button>
+
+      {/* Page numbers */}
+      {getPages().map((item, index) => {
+        if (item === "...") {
+          return (
+            <span key={`dots-${index}`} className="pagination-dots">
+              …
+            </span>
+          );
+        }
+
+        return (
+          <button
+            key={item}
+            className={`pagination-btn ${current === item ? "active" : ""}`}
+            disabled={loading}
+            onClick={() => onPageChange(item)}
+          >
+            {item}
+          </button>
+        );
+      })}
+
+      {/* Next */}
+      <button
+        className="pagination-btn arrow"
+        disabled={current >= last || loading}
+        onClick={() => onPageChange(current + 1)}
+        aria-label="صفحه بعد"
+        title="صفحه بعد"
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
+  const location = useLocation();
+
   const [d, setD] = useState(null);
 
   // =========================
   // Payments
   // =========================
+
   const [payments, setPayments] = useState([]);
   const [paymentsMeta, setPaymentsMeta] = useState(null);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
@@ -63,6 +187,7 @@ export default function AdminDashboard() {
   // =========================
   // Users
   // =========================
+
   const [users, setUsers] = useState([]);
   const [showUsers, setShowUsers] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -71,6 +196,7 @@ export default function AdminDashboard() {
   // =========================
   // Orders
   // =========================
+
   const [orders, setOrders] = useState([]);
   const [showOrders, setShowOrders] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -80,6 +206,7 @@ export default function AdminDashboard() {
   // =========================
   // Products
   // =========================
+
   const [products, setProducts] = useState([]);
   const [showProducts, setShowProducts] = useState(false);
   const [productsLoading, setProductsLoading] = useState(false);
@@ -88,9 +215,10 @@ export default function AdminDashboard() {
   const [productsSearch, setProductsSearch] = useState("");
   const [productsFilter, setProductsFilter] = useState("");
 
-  // =========================
-  // Load dashboard
-  // =========================
+  // =========================================================
+  // Load Dashboard
+  // =========================================================
+
   async function load() {
     try {
       const dashboardRes = await api.get("/admin/dashboard");
@@ -104,6 +232,11 @@ export default function AdminDashboard() {
       alert(e.response?.data?.message || "خطا در دریافت اطلاعات پنل مدیریت");
     }
   }
+
+  // =========================================================
+  // Payments
+  // =========================================================
+
   async function loadPayments(page = 1) {
     setPaymentsLoading(true);
 
@@ -125,9 +258,10 @@ export default function AdminDashboard() {
     }
   }
 
-  // =========================
-  // Load users
-  // =========================
+  // =========================================================
+  // Users
+  // =========================================================
+
   async function loadUsers(page = 1) {
     setUsersLoading(true);
 
@@ -150,9 +284,10 @@ export default function AdminDashboard() {
     }
   }
 
-  // =========================
-  // Load orders
-  // =========================
+  // =========================================================
+  // Orders
+  // =========================================================
+
   async function loadOrders(page = 1, pendingOnly = false) {
     setOrdersLoading(true);
 
@@ -177,9 +312,10 @@ export default function AdminDashboard() {
     }
   }
 
-  // =========================
-  // Load products
-  // =========================
+  // =========================================================
+  // Products
+  // =========================================================
+
   async function loadProducts(page = 1, filter = "", search = "") {
     setProductsLoading(true);
 
@@ -206,32 +342,36 @@ export default function AdminDashboard() {
     }
   }
 
-  // =========================
-  // Initial load
-  // =========================
+  // =========================================================
+  // Initial Load
+  // =========================================================
+
   useEffect(() => {
     load();
   }, []);
 
-  // =========================
-  // Approve payment
-  // =========================
+  useEffect(() => {
+    if (location.state?.openProducts) {
+      loadProducts(1, "", "");
+    }
+  }, []);
+
+  // =========================================================
+  // Approve Payment
+  // =========================================================
+
   async function approve(payment) {
     try {
       await api.post(`/admin/payments/${payment.id}/approve`);
 
       alert("پرداخت با موفقیت تأیید شد.");
 
-      // حفظ صفحه فعلی پرداخت‌ها
       await loadPayments(paymentsMeta?.current_page || 1);
 
-      // به‌روزرسانی آمار داشبورد
       const dashboardRes = await api.get("/admin/dashboard");
 
       setD(dashboardRes.data);
 
-      // اگر سفارش‌ها باز هستند،
-      // همان صفحه قبلی دوباره دریافت شود
       if (showOrders) {
         await loadOrders(ordersMeta?.current_page || 1, ordersPendingOnly);
       }
@@ -242,12 +382,14 @@ export default function AdminDashboard() {
     }
   }
 
-  // =========================
-  // User management
-  // =========================
+  // =========================================================
+  // User Management
+  // =========================================================
+
   async function changeUserRole(user, role) {
     try {
       await api.patch(`/admin/users/${user.id}/role`, { role });
+
       await loadUsers(usersMeta?.current_page || 1);
     } catch (e) {
       alert(e.response?.data?.message || "تغییر نقش کاربر انجام نشد.");
@@ -257,105 +399,17 @@ export default function AdminDashboard() {
   async function changeUserStatus(user, is_active) {
     try {
       await api.patch(`/admin/users/${user.id}/status`, { is_active });
+
       await loadUsers(usersMeta?.current_page || 1);
     } catch (e) {
       alert(e.response?.data?.message || "تغییر وضعیت کاربر انجام نشد.");
     }
   }
 
-  // =========================
-  // Get latest payment
-  // =========================
-  function getPayment(order) {
-    if (!order?.payments || !order.payments.length) {
-      return null;
-    }
+  // =========================================================
+  // Dashboard Stats
+  // =========================================================
 
-    return order.payments[order.payments.length - 1];
-  }
-
-  // =========================
-  // Receipt URL
-  // =========================
-  function getReceiptUrl(payment) {
-    if (!payment?.receipt_path) {
-      return null;
-    }
-
-    return `http://127.0.0.1:8000/storage/${payment.receipt_path}`;
-  }
-
-  // =========================
-  // Translate order status
-  // =========================
-  function translateStatus(status) {
-    const statuses = {
-      pending: "در انتظار",
-      waiting_for_verification: "در انتظار تأیید پرداخت",
-      waiting_for_check_verification: "در انتظار تأیید چک",
-      confirmed: "تأیید شده",
-      processing: "در حال پردازش",
-      preparing: "در حال آماده‌سازی",
-      shipped: "ارسال شده",
-      delivered: "تحویل داده شده",
-      cancelled: "لغو شده",
-      rejected: "رد شده",
-    };
-
-    return statuses[status] || status || "-";
-  }
-
-  // =========================
-  // Translate payment method
-  // =========================
-  function translatePaymentMethod(method) {
-    const methods = {
-      online: "پرداخت آنلاین",
-      bank_transfer: "واریز بانکی",
-      check: "چک",
-    };
-
-    return methods[method] || method || "-";
-  }
-
-  // =========================
-  // Format date
-  // =========================
-  function formatDate(date) {
-    if (!date) {
-      return "-";
-    }
-
-    try {
-      return new Date(date).toLocaleDateString("fa-IR");
-    } catch {
-      return date;
-    }
-  }
-
-  // =========================
-  // Product image
-  // =========================
-  function getProductImage(product) {
-    if (product?.main_image) {
-      return product.main_image;
-    }
-
-    if (product?.images && product.images.length > 0) {
-      return (
-        product.images[0].url ||
-        product.images[0].image ||
-        product.images[0].path ||
-        null
-      );
-    }
-
-    return null;
-  }
-
-  // =========================
-  // Dashboard stats
-  // =========================
   const stats = [
     {
       key: "users",
@@ -420,7 +474,9 @@ export default function AdminDashboard() {
         {stats.map((x) => (
           <div
             key={x.key}
-            className={`card admin-stat-card ${x.clickable ? "is-clickable" : ""}`}
+            className={`card admin-stat-card ${
+              x.clickable ? "is-clickable" : ""
+            }`}
             onClick={() => {
               if (x.key === "users") {
                 loadUsers(1);
@@ -476,7 +532,7 @@ export default function AdminDashboard() {
                 </button>
               )}
 
-              {/* All Orders */}
+              {/* Orders */}
 
               {x.key === "orders" && (
                 <button
@@ -534,11 +590,14 @@ export default function AdminDashboard() {
                 </button>
               )}
 
+              {/* Expired */}
+
               {x.key === "expired" && (
                 <button
                   className="btn full admin-card-button"
                   onClick={(e) => {
                     e.stopPropagation();
+
                     loadProducts(1, "expired", "");
                   }}
                 >
@@ -578,19 +637,13 @@ export default function AdminDashboard() {
                 <div className="table admin-table-scroll">
                   <div className="tr admin-table-header admin-table-min-900">
                     <span>نام کاربری</span>
-
                     <span>نام</span>
-
                     <span>ایمیل</span>
-
                     <span>موبایل</span>
-
                     <span>نقش</span>
-
-                    <span>سفارش‌ها</span>
-
-                    <span>تاریخ ثبت‌نام</span>
                     <span>وضعیت</span>
+                    <span>سفارش‌ها</span>
+                    <span>تاریخ ثبت‌نام</span>
                   </div>
 
                   {users.map((u) => (
@@ -616,47 +669,38 @@ export default function AdminDashboard() {
                         </select>
                       </span>
 
+                      <span className="user-status-cell">
+                        <button
+                          className={`user-status-btn ${
+                            u.is_active ? "active" : "inactive"
+                          }`}
+                          onClick={() => changeUserStatus(u, !u.is_active)}
+                        >
+                          {u.is_active ? "فعال" : "غیرفعال"}
+                        </button>
+                      </span>
+
                       <span>{u.orders_count ?? 0}</span>
 
                       <span>{formatDate(u.created_at)}</span>
 
-                      <span>
+                      <span className="user-delete-cell">
                         <button
-                          className="btn small"
-                          onClick={() => changeUserStatus(u, !u.is_active)}
+                          className="user-delete-btn"
+                          onClick={() => deleteUser(u)}
                         >
-                          {u.is_active ? "فعال" : "غیرفعال"}
+                          حذف
                         </button>
                       </span>
                     </div>
                   ))}
                 </div>
 
-                {/* Users Pagination */}
-
-                {usersMeta && usersMeta.last_page > 1 && (
-                  <div className="pagination admin-pagination">
-                    <button
-                      className="btn"
-                      disabled={!usersMeta.prev_page_url || usersLoading}
-                      onClick={() => loadUsers(usersMeta.current_page - 1)}
-                    >
-                      قبلی
-                    </button>
-
-                    <span>
-                      صفحه {usersMeta.current_page} از {usersMeta.last_page}
-                    </span>
-
-                    <button
-                      className="btn"
-                      disabled={!usersMeta.next_page_url || usersLoading}
-                      onClick={() => loadUsers(usersMeta.current_page + 1)}
-                    >
-                      بعدی
-                    </button>
-                  </div>
-                )}
+                <AdminPagination
+                  meta={usersMeta}
+                  loading={usersLoading}
+                  onPageChange={(newPage) => loadUsers(newPage)}
+                />
               </>
             )}
           </div>
@@ -742,7 +786,10 @@ export default function AdminDashboard() {
                               <div key={item.id} className="admin-order-item">
                                 <b>{item.product?.name || "محصول حذف شده"}</b>
 
-                                <span> × {item.quantity}</span>
+                                <span>
+                                  {" × "}
+                                  {item.quantity}
+                                </span>
                               </div>
                             ))}
                           </div>
@@ -777,40 +824,6 @@ export default function AdminDashboard() {
                             </div>
                           )}
 
-                          {/* Payments Pagination */}
-
-                          {paymentsMeta && paymentsMeta.last_page > 1 && (
-                            <div className="pagination admin-pagination">
-                              <button
-                                className="btn"
-                                disabled={
-                                  !paymentsMeta.prev_page_url || paymentsLoading
-                                }
-                                onClick={() =>
-                                  loadPayments(paymentsMeta.current_page - 1)
-                                }
-                              >
-                                قبلی
-                              </button>
-
-                              <span>
-                                صفحه {paymentsMeta.current_page} از{" "}
-                                {paymentsMeta.last_page}
-                              </span>
-
-                              <button
-                                className="btn"
-                                disabled={
-                                  !paymentsMeta.next_page_url || paymentsLoading
-                                }
-                                onClick={() =>
-                                  loadPayments(paymentsMeta.current_page + 1)
-                                }
-                              >
-                                بعدی
-                              </button>
-                            </div>
-                          )}
                           {payment.rejection_reason && (
                             <p>
                               <b>دلیل رد:</b> {payment.rejection_reason}
@@ -833,39 +846,13 @@ export default function AdminDashboard() {
 
                 {/* Orders Pagination */}
 
-                {ordersMeta && ordersMeta.last_page > 1 && (
-                  <div className="pagination admin-pagination">
-                    <button
-                      className="btn"
-                      disabled={!ordersMeta.prev_page_url || ordersLoading}
-                      onClick={() =>
-                        loadOrders(
-                          ordersMeta.current_page - 1,
-                          ordersPendingOnly,
-                        )
-                      }
-                    >
-                      قبلی
-                    </button>
-
-                    <span>
-                      صفحه {ordersMeta.current_page} از {ordersMeta.last_page}
-                    </span>
-
-                    <button
-                      className="btn"
-                      disabled={!ordersMeta.next_page_url || ordersLoading}
-                      onClick={() =>
-                        loadOrders(
-                          ordersMeta.current_page + 1,
-                          ordersPendingOnly,
-                        )
-                      }
-                    >
-                      بعدی
-                    </button>
-                  </div>
-                )}
+                <AdminPagination
+                  meta={ordersMeta}
+                  loading={ordersLoading}
+                  onPageChange={(newPage) =>
+                    loadOrders(newPage, ordersPendingOnly)
+                  }
+                />
               </>
             )}
           </div>
@@ -879,8 +866,6 @@ export default function AdminDashboard() {
       {showProducts && (
         <div className="card admin-section-card">
           <div className="card-body">
-            {/* Products Header */}
-
             <div className="admin-section-header">
               <div>
                 <h2 className="admin-section-title">🛍️ مدیریت محصولات</h2>
@@ -907,9 +892,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* ==================================================
-                PRODUCTS SEARCH
-            ================================================== */}
+            {/* Products Search */}
 
             <div className="admin-product-search">
               <input
@@ -954,33 +937,25 @@ export default function AdminDashboard() {
               <>
                 <div className="table admin-table-scroll">
                   {/* Header */}
-
-                  <div className="tr admin-table-header admin-table-min-1050">
+                  <div className="tr admin-products-row admin-products-header">
                     <span>تصویر</span>
-
                     <span>نام محصول</span>
-
                     <span>SKU</span>
-
                     <span>قیمت</span>
-
                     <span>تخفیف</span>
-
                     <span>موجودی</span>
-
                     <span>وضعیت</span>
-
-                    <span>عملیات</span>
+                    <span>مدیریت</span>
                   </div>
 
+                  {/* Products */}
                   {products.map((product) => {
                     const image = getProductImage(product);
 
                     return (
-                      <div key={product.id} className="tr admin-table-min-1050">
+                      <div key={product.id} className="tr admin-products-row">
                         {/* Image */}
-
-                        <span>
+                        <span className="admin-product-image-cell">
                           {image ? (
                             <img
                               src={image}
@@ -993,23 +968,19 @@ export default function AdminDashboard() {
                         </span>
 
                         {/* Name */}
-
-                        <span>
+                        <span className="admin-product-name-cell">
                           <b>{product.name}</b>
                         </span>
 
                         {/* SKU */}
-
                         <span>{product.sku || "-"}</span>
 
                         {/* Price */}
-
                         <span>
                           {money(product.final_price ?? product.price)}
                         </span>
 
                         {/* Discount */}
-
                         <span>
                           {product.discount_percentage > 0
                             ? `${product.discount_percentage}%`
@@ -1017,18 +988,23 @@ export default function AdminDashboard() {
                         </span>
 
                         {/* Stock */}
-
                         <span>{product.stock ?? 0}</span>
 
                         {/* Status */}
-
-                        <span>{product.is_active ? "فعال" : "غیرفعال"}</span>
+                        <span>
+                          <span
+                            className={`admin-product-status ${
+                              product.is_active ? "active" : "inactive"
+                            }`}
+                          >
+                            {product.is_active ? "فعال" : "غیرفعال"}
+                          </span>
+                        </span>
 
                         {/* Actions */}
-
                         <span className="admin-product-actions">
                           <Link
-                            className="btn"
+                            className="admin-product-edit-btn"
                             to={`/admin/products/${product.id}`}
                           >
                             ویرایش
@@ -1041,42 +1017,13 @@ export default function AdminDashboard() {
 
                 {/* Products Pagination */}
 
-                {productsMeta && productsMeta.last_page > 1 && (
-                  <div className="pagination admin-pagination">
-                    <button
-                      className="btn"
-                      disabled={!productsMeta.prev_page_url || productsLoading}
-                      onClick={() =>
-                        loadProducts(
-                          productsMeta.current_page - 1,
-                          productsFilter,
-                          productsSearch,
-                        )
-                      }
-                    >
-                      قبلی
-                    </button>
-
-                    <span>
-                      صفحه {productsMeta.current_page} از{" "}
-                      {productsMeta.last_page}
-                    </span>
-
-                    <button
-                      className="btn"
-                      disabled={!productsMeta.next_page_url || productsLoading}
-                      onClick={() =>
-                        loadProducts(
-                          productsMeta.current_page + 1,
-                          productsFilter,
-                          productsSearch,
-                        )
-                      }
-                    >
-                      بعدی
-                    </button>
-                  </div>
-                )}
+                <AdminPagination
+                  meta={productsMeta}
+                  loading={productsLoading}
+                  onPageChange={(newPage) =>
+                    loadProducts(newPage, productsFilter, productsSearch)
+                  }
+                />
               </>
             )}
           </div>
@@ -1086,3 +1033,26 @@ export default function AdminDashboard() {
   );
 }
 
+async function deleteUser(user) {
+  const confirmed = window.confirm(
+    `آیا مطمئن هستید که می‌خواهید کاربر «${user.name || user.username || user.email}» را حذف کنید؟`,
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await api.delete(`/admin/users/${user.id}`);
+
+    alert("کاربر با موفقیت حذف شد.");
+
+    // دوباره لیست کاربران را دریافت کن
+    loadUsers(usersMeta?.current_page || 1);
+
+    // آمار داشبورد را هم به‌روزرسانی کن
+    load();
+  } catch (error) {
+    console.error("خطا در حذف کاربر:", error);
+
+    alert(error?.response?.data?.message || "حذف کاربر انجام نشد.");
+  }
+}

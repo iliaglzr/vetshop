@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\{Order, Payment, Product, InventoryTransaction};
 use App\Services\OrderService;
 use Illuminate\Http\Request;
+use App\Models\User;
 
 class AdminController extends Controller
 {
@@ -30,7 +31,11 @@ class AdminController extends Controller
                 ->whereDate('expiration_date', '<', now()->toDateString())
                 ->count(),
             'sales' => Order::whereIn('status', [
-                'confirmed', 'processing', 'preparing', 'shipped', 'delivered'
+                'confirmed',
+                'processing',
+                'preparing',
+                'shipped',
+                'delivered'
             ])->sum('total'),
         ];
     }
@@ -143,5 +148,24 @@ class AdminController extends Controller
             'reason' => $d['reason'],
         ]);
         return $product->fresh();
+    }
+    public function deleteUser(Request $request, User $user)
+    {
+        // ادمین اجازه حذف خودش را ندارد
+        if ($request->user()->id === $user->id) {
+            return response()->json([
+                'message' => 'شما نمی‌توانید حساب کاربری خودتان را حذف کنید.'
+            ], 422);
+        }
+
+        // حذف توکن‌های کاربر
+        $user->tokens()->delete();
+
+        // حذف کاربر
+        $user->delete();
+
+        return response()->json([
+            'message' => 'کاربر با موفقیت حذف شد.'
+        ]);
     }
 }

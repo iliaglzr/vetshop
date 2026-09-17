@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 
 class AdminUserController extends Controller
 {
@@ -28,5 +29,30 @@ class AdminUserController extends Controller
         $d = $r->validate(['is_active' => 'required|boolean']);
         $user->update(['is_active' => $d['is_active']]);
         return ['message' => 'وضعیت کاربر تغییر کرد.', 'user' => $user->fresh()];
+    }
+    public function destroy(Request $request, User $user)
+    {
+        // جلوگیری از حذف حساب ادمین فعلی
+        if ($request->user()->id === $user->id) {
+            return response()->json([
+                'message' => 'شما نمی‌توانید حساب کاربری خودتان را حذف کنید.'
+            ], 422);
+        }
+
+        DB::transaction(function () use ($user) {
+
+            // حذف توکن‌های کاربر
+            $user->tokens()->delete();
+
+            // حذف سفارش‌های کاربر
+            $user->orders()->delete();
+
+            // در نهایت حذف خود کاربر
+            $user->delete();
+        });
+
+        return response()->json([
+            'message' => 'کاربر و تمام اطلاعات وابسته به او با موفقیت حذف شدند.'
+        ]);
     }
 }

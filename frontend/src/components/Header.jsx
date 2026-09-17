@@ -8,9 +8,9 @@ export default function Header({ cartCount }) {
     <Link to="/" className="logo">Vet<span>Shop</span></Link>
     <nav>
       <Link to="/products">محصولات</Link>
-      <Link to="/products?category=1">داروها</Link>
-      <Link to="/products?category=2">مکمل‌ها</Link>
-      <Link to="/products?category=3">تجهیزات</Link>
+      <Link to="/products?category=1">پت شاپ</Link>
+      <Link to="/products?category=2">واکسن</Link>
+      <Link to="/products?category=3">داروها</Link>
     </nav>
     <div className="nav-actions">
       <Link to="/cart" className="icon"><ShoppingCart /><b>{cartCount}</b></Link>
