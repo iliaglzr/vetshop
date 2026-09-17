@@ -209,33 +209,52 @@ class ProductController extends Controller
      * لیست محصولات
      */
     public function index(Request $r)
-    {
-        $q = $this->visibleQuery($r);
+{
+    $q = $this->visibleQuery($r);
 
-        $sort = $r->get('sort', 'newest');
+    $sort = $r->get('sort', 'newest');
 
-        $q = $sort === 'price_asc'
+    $q = match ($sort) {
 
-            ? $q->orderBy('price')
+        // قیمت: کم به زیاد
+        'price_asc' =>
+            $q->orderBy('price', 'asc'),
 
-            : (
-                $sort === 'price_desc'
+        // قیمت: زیاد به کم
+        'price_desc' =>
+            $q->orderBy('price', 'desc'),
 
-                ? $q->orderByDesc('price')
+        // بیشترین تخفیف
+        'discount' =>
+            $q->orderByDesc('discount_percentage'),
 
-                : (
-                    $sort === 'discount'
+        // تاریخ انقضا: نزدیک‌ترین
+        'expiry_asc' =>
+            $q->whereNotNull('expiration_date')
+              ->orderBy('expiration_date', 'asc'),
 
-                    ? $q->orderByDesc('discount_percentage')
+        // تاریخ انقضا: دورترین
+        'expiry_desc' =>
+            $q->whereNotNull('expiration_date')
+              ->orderBy('expiration_date', 'desc'),
 
-                    : $q->latest()
-                )
-            );
+        // قدیمی‌ترین محصولات
+        'oldest' =>
+            $q->orderBy('created_at', 'asc'),
 
-        return $q->paginate(
-            (int) $r->get('per_page', 15)
-        );
-    }
+        // جدیدترین محصولات
+        'newest' =>
+            $q->orderBy('created_at', 'desc'),
+
+        // اگر مقدار اشتباه بود
+        default =>
+            $q->orderBy('created_at', 'desc'),
+    };
+
+    return $q->paginate(
+        (int) $r->get('per_page', 15)
+    );
+}
 
 
     /**

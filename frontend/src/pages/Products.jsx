@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
@@ -6,9 +5,12 @@ import { api } from '../api';
 import ProductCard from '../components/ProductCard';
 
 export default function Products() {
+
   const [ps, setPs] = useState([]);
-  const [q, setQ] = useState('');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState('newest');
+  const [inStock, setInStock] = useState('');
 
   const [meta, setMeta] = useState({
     current_page: 1,
@@ -20,14 +22,28 @@ export default function Products() {
 
   async function load(pageNumber = 1) {
     try {
-      const r = await api.get('/products', {
-        params: {
-          search: q || undefined,
-          category_id: params.get('category') || undefined,
-          page: pageNumber,
-          per_page: 15,
-        },
-      });
+      const queryParams = new URLSearchParams();
+
+      if (search.trim()) {
+        queryParams.set('search', search.trim());
+      }
+
+      if (sort) {
+        queryParams.set('sort', sort);
+      }
+
+      if (inStock !== '') {
+        queryParams.set('in_stock', inStock);
+      }
+
+      if (params.get('category')) {
+        queryParams.set('category_id', params.get('category'));
+      }
+
+      queryParams.set('page', pageNumber);
+      queryParams.set('per_page', 15);
+
+      const r = await api.get(`/products?${queryParams.toString()}`);
 
       setPs(r.data.data || []);
 
@@ -57,7 +73,7 @@ export default function Products() {
   useEffect(() => {
     setPage(1);
     load(1);
-  }, [params.toString()]);
+  }, [params.toString(), sort, inStock]);
 
   function handleSearch() {
     setPage(1);
@@ -85,16 +101,13 @@ export default function Products() {
     const current = page;
     const last = meta.last_page;
 
-    // اگر 3 صفحه یا کمتر داریم
     if (last <= 3) {
       for (let i = 1; i <= last; i++) {
         pages.push(i);
       }
-
       return pages;
     }
 
-    // ابتدای صفحات
     if (current <= 2) {
       pages.push(1);
       pages.push(2);
@@ -105,11 +118,9 @@ export default function Products() {
       }
 
       pages.push(last);
-
-      return pages;
+ return pages;
     }
 
-    // انتهای صفحات
     if (current >= last - 1) {
       pages.push(1);
 
@@ -120,17 +131,14 @@ export default function Products() {
       pages.push(last - 2);
       pages.push(last - 1);
       pages.push(last);
-
       return pages;
     }
 
-    // وسط صفحات
     pages.push(1);
     pages.push('...');
     pages.push(current);
     pages.push('...');
     pages.push(last);
-
     return pages;
   }
 
@@ -149,8 +157,8 @@ export default function Products() {
           <Search />
 
           <input
-            value={q}
-            onChange={e => setQ(e.target.value)}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 handleSearch();
@@ -163,6 +171,27 @@ export default function Products() {
             جستجو
           </button>
         </div>
+
+        <select
+          value={sort}
+          onChange={e => setSort(e.target.value)}
+        >
+          <option value="newest">جدیدترین</option>
+          <option value="oldest">قدیمی‌ترین</option>
+          <option value="price_asc">قیمت: کم به زیاد</option>
+          <option value="price_desc">قیمت: زیاد به کم</option>
+          <option value="expiry_asc">تاریخ انقضا: نزدیک‌ترین</option>
+          <option value="expiry_desc">تاریخ انقضا: دورترین</option>
+        </select>
+
+        <select
+          value={inStock}
+          onChange={e => setInStock(e.target.value)}
+        >
+          <option value="">همه محصولات</option>
+          <option value="1">فقط موجود</option>
+          <option value="0">فقط ناموجود</option>
+        </select>
       </div>
 
       <div className="grid">
@@ -193,7 +222,6 @@ export default function Products() {
           }}
         >
 
-          {/* صفحه قبل */}
           <button
             className="pagination-btn arrow"
             disabled={page <= 1}
@@ -204,7 +232,6 @@ export default function Products() {
             ‹
           </button>
 
-          {/* شماره صفحات */}
           {getPageNumbers().map((item, index) => {
 
             if (item === '...') {
@@ -231,7 +258,6 @@ export default function Products() {
             );
           })}
 
-          {/* صفحه بعد */}
           <button
             className="pagination-btn arrow"
             disabled={page >= meta.last_page}
