@@ -16,6 +16,7 @@ export default function AdminProduct() {
     brand_id: "",
     price: "",
     old_price: "",
+    discount_type: "percentage",
     discount_percentage: 0,
     stock: 0,
     minimum_order_quantity: 1,
@@ -42,6 +43,8 @@ export default function AdminProduct() {
           setP((x) => ({
             ...x,
             ...res.data,
+            discount_type: res.data.discount_type || "percentage",
+            discount_percentage: res.data.discount_percentage ?? 0,
             allowed_roles:
               res.data.roles?.map((r) => r.role) ||
               res.data.allowed_roles ||
@@ -88,10 +91,10 @@ export default function AdminProduct() {
         }
       }
 
-      nav('/admin', {
+      nav("/admin", {
         state: {
-          openProducts: true
-        }
+          openProducts: true,
+        },
       });
     } catch (e) {
       alert(
@@ -187,7 +190,6 @@ export default function AdminProduct() {
             ["sku", "SKU"],
             ["price", "قیمت"],
             ["old_price", "قیمت قبلی"],
-            ["discount_percentage", "تخفیف درصدی"],
             ["stock", "موجودی"],
             ["minimum_order_quantity", "حداقل سفارش"],
             ["minimum_stock", "حداقل موجودی"],
@@ -211,6 +213,62 @@ export default function AdminProduct() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="discount-section">
+          <h3>نوع تخفیف</h3>
+
+          <div className="discount-type-options">
+            <label>
+              <input
+                type="radio"
+                name="discount_type"
+                value="percentage"
+                checked={p.discount_type === "percentage"}
+                onChange={(e) => set("discount_type", e.target.value)}
+              />
+              تخفیف درصدی
+            </label>
+
+            <label>
+              <input
+                type="radio"
+                name="discount_type"
+                value="gift"
+                checked={p.discount_type === "gift"}
+                onChange={(e) => set("discount_type", e.target.value)}
+              />
+              تخفیف جنسی
+            </label>
+          </div>
+
+          <div className="discount-value">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={p.discount_percentage ?? 0}
+              onChange={(e) => set("discount_percentage", e.target.value)}
+              placeholder={
+                p.discount_type === "gift" ? "درصد تخفیف جنسی" : "درصد تخفیف"
+              }
+            />
+
+            <span>%</span>
+          </div>
+
+          {p.discount_type === "gift" && (
+            <p className="hint">
+              مثال: اگر تخفیف جنسی ۲۰٪ باشد، به ازای هر ۵ عدد خرید، ۱ عدد رایگان
+              تعلق می‌گیرد.
+            </p>
+          )}
+
+          {p.discount_type === "percentage" && (
+            <p className="hint">
+              مثال: تخفیف ۲۰٪ یعنی قیمت محصول ۲۰٪ کاهش پیدا می‌کند.
+            </p>
+          )}
         </div>
 
         <textarea

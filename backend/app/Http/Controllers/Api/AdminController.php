@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Order, Payment, Product, InventoryTransaction};
+use App\Models\{Order, Payment, Product, InventoryTransaction, StockRequest};
 use App\Services\OrderService;
 use Illuminate\Http\Request;
 use App\Models\User;
@@ -23,6 +23,7 @@ class AdminController extends Controller
                 'waiting_for_check_verification'
             ])->count(),
             'low_stock' => Product::whereColumn('stock', '<=', 'minimum_stock')->count(),
+            'stock_requests' => StockRequest::where('status', 'pending')->count(),
             'near_expiry' => Product::whereNotNull('expiration_date')
                 ->whereDate('expiration_date', '>=', now()->toDateString())
                 ->whereDate('expiration_date', '<=', now()->addDays(30)->toDateString())

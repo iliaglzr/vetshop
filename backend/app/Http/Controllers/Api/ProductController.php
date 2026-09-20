@@ -3,12 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Product, Category, ProductImage};
+use App\Models\{Product, Category, ProductImage, Brand};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-
 class ProductController extends Controller
 {
     /**
@@ -165,6 +164,15 @@ class ProductController extends Controller
         if ($r->filled('category_id')) {
 
             $q->where('category_id', $r->category_id);
+        }
+        /*
+        |--------------------------------------------------------------------------
+        | فیلتر برند
+        |--------------------------------------------------------------------------
+        */
+
+        if ($r->filled('brand_id')) {
+            $q->where('brand_id', $r->brand_id);
         }
 
 
@@ -368,6 +376,18 @@ class ProductController extends Controller
             ->with('children')
             ->get();
     }
+    /**
+     * لیست برندها
+     */
+    public function brands()
+    {
+        return Brand::where('is_active', 1)
+            ->orderBy('name')
+            ->get([
+                'id',
+                'name',
+            ]);
+    }
 
 
     /**
@@ -394,6 +414,8 @@ class ProductController extends Controller
             'old_price' => 'nullable|numeric',
 
             'discount_percentage' => 'nullable|numeric|min:0|max:100',
+            'discount_type' => ['nullable','in:percentage,gift',],
+
 
             'stock' => 'required|integer|min:0',
 
@@ -420,7 +442,8 @@ class ProductController extends Controller
 
         ]);
 
-
+        $d['discount_type'] = $d['discount_type'] ?? 'percentage';
+                   
         return DB::transaction(function () use ($d) {
 
             $roles = $d['allowed_roles'] ?? [];
@@ -480,11 +503,11 @@ class ProductController extends Controller
             'old_price' =>
             'nullable|numeric',
 
-            'discount_percentage' =>
-            'nullable|numeric|min:0|max:100',
+            'discount_percentage' =>'nullable|numeric|min:0|max:100',
 
-            'stock' =>
-            'sometimes|integer|min:0',
+            'discount_type' => ['nullable','in:percentage,gift',],
+
+            'stock' =>'sometimes|integer|min:0',
 
             'minimum_order_quantity' =>
             'sometimes|integer|min:1',

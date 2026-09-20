@@ -1,9 +1,12 @@
 <?php
 
 namespace App\Imports;
+
 use App\Models\Product;
+use App\Models\Brand;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -14,781 +17,1055 @@ class ProductsImport implements ToCollection, WithHeadingRow
     private int $newProducts = 0;
     private int $updatedProducts = 0;
     private int $skippedRows = 0;
-    private int $failedRows = 0;
+    private int $uploadedImages = 0;
+    private int $missingImages = 0;
+
+    private array $brandCache = [];
+    private array $categoryCache = [];
+
+    public function __construct()
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Category cache
+        |--------------------------------------------------------------------------
+        */
+
+        $this->categoryCache = [
+            ''          => 3,
+            'medicine'  => 3,
+            'vaccine'   => 2,
+            'pet shop'  => 1,
+            'petshop'   => 1,
+        ];
+
+        /*
+        |--------------------------------------------------------------------------
+        | Brand cache
+        |--------------------------------------------------------------------------
+        */
+
+        Brand::query()
+            ->get(['id', 'name', 'slug'])
+            ->each(function ($brand) {
+                $key = $this->normalizeText($brand->name);
+
+                if ($key !== '') {
+                    $this->brandCache[$key] = $brand;
+                }
+            });
+    }
 
     public function collection(Collection $rows): void
     {
-        $this->totalRows = $rows->count();
-
-        foreach ($rows as $index => $row) {
+        foreach ($rows as $row) {
+            $this->totalRows++;
 
             try {
-
-                $data = $row->toArray();
-
-                /*
-                |--------------------------------------------------------------------------
-                | Excel Headers
-                |--------------------------------------------------------------------------
-                |
-                | WithHeadingRow نام ستون‌های فارسی را به این شکل تبدیل کرده:
-                |
-                | نام کالا          => nam_kala
-                | موجودی            => mogody
-                | واحد کالا         => oahd_kala
-                | توضیحات           => todyhat
-                | فی فروش           => fy_frosh
-                | مشخصات فنی 1      => mshkhsat_fny_1
-                | مشخصات فنی 2      => mshkhsat_fny_2
-                | دسته بندی         => dsth_bndy
-                |
-                */
-
-                // ---------------------------------------------------------
-                // نام کالا
-                // ---------------------------------------------------------
-
-                $name = trim(
-                    (string) (
-                        $data['nam_kala']
-                        ?? $data['name']
-                        ?? ''
-                    )
-                );
-
-                if ($name === '') {
-                    $this->skippedRows++;
-
-                    echo "ردیف " . ($index + 2) . " رد شد: نام کالا خالی است.\n";
-
-                    continue;
-                }
-
-                $normalizedName = $this->normalizeText($name);
-
-                // حذف ردیف‌های Total / جمع
-                if (
-                    str_contains($normalizedName, 'جمع') ||
-                    str_contains($normalizedName, 'total')
-                ) {
-                    $this->skippedRows++;
-
-                    echo "ردیف " . ($index + 2) . " رد شد: ردیف جمع.\n";
-
-                    continue;
-                }
-
-                // ---------------------------------------------------------
-                // موجودی
-                // ---------------------------------------------------------
-
-                $stock = $this->toInt(
-                    $data['mogody']
-                    ?? $data['stock']
-                    ?? 0
-                );
-
-                // ---------------------------------------------------------
-                // واحد کالا
-                // ---------------------------------------------------------
-
-                $unit = trim(
-                    (string) (
-                        $data['oahd_kala']
-                        ?? $data['unit']
-                        ?? ''
-                    )
-                );
-
-                // ---------------------------------------------------------
-                // توضیحات / تاریخ انقضا
-                // ---------------------------------------------------------
-
-                $description = trim(
-                    (string) (
-                        $data['todyhat']
-                        ?? $data['description']
-                        ?? ''
-                    )
-                );
-
-                // در فایل فعلی مقدار این ستون مثل 2028/06 است
-                $expirationDate = $this->parseExpirationDate($description);
-
-                // ---------------------------------------------------------
-                // قیمت فروش
-                // ---------------------------------------------------------
-
-                $price = $this->toDecimal(
-                    $data['fy_frosh']
-                    ?? $data['قیمت فروش']
-                    ?? $data['price']
-                    ?? 0
-                );
-
-                $price = $price ?? 0;
-
-                // ---------------------------------------------------------
-                // قیمت مصرف کننده
-                // ---------------------------------------------------------
-
-                $consumerPrice = $this->toDecimal(
-                    $data['gymt_msrf_knndh']
-                    ?? $data['consumer_price']
-                    ?? $data['old_price']
-                    ?? null
-                );
-
-                // ---------------------------------------------------------
-                // دسته بندی
-                // ---------------------------------------------------------
-
-                $categoryName = trim(
-                    (string) (
-                        $data['dsth_bndy']
-                        ?? $data['category']
-                        ?? ''
-                    )
-                );
-
-                $categoryId = $this->getCategoryId($categoryName);
-
-                if (!$categoryId) {
-
-                    $this->skippedRows++;
-
-                    echo "ردیف " . ($index + 2)
-                        . " رد شد: دسته‌بندی پیدا نشد."
-                        . " [{$categoryName}]"
-                        . " - محصول: {$name}\n";
-
-                    continue;
-                }
-
-                // ---------------------------------------------------------
-                // مشخصات فنی 1
-                // ---------------------------------------------------------
-
-                $technical1 = trim(
-                    (string) (
-                        $data['mshkhsat_fny_1']
-                        ?? ''
-                    )
-                );
-
-                // ---------------------------------------------------------
-                // مشخصات فنی 2
-                // ---------------------------------------------------------
-
-                $technical2 = trim(
-                    (string) (
-                        $data['mshkhsat_fny_2']
-                        ?? ''
-                    )
-                );
-
-                // ---------------------------------------------------------
-                // ساخت توضیحات کامل
-                // ---------------------------------------------------------
-
-                $fullDescription = $description;
-
-                if ($technical1 !== '') {
-                    $fullDescription .=
-                        ($fullDescription !== '' ? "\n" : '')
-                        . "مشخصات فنی 1: "
-                        . $technical1;
-                }
-
-                if ($technical2 !== '') {
-                    $fullDescription .=
-                        ($fullDescription !== '' ? "\n" : '')
-                        . "مشخصات فنی 2: "
-                        . $technical2;
-                }
-
-                $fullDescription = trim($fullDescription);
-
-                // ---------------------------------------------------------
-                // بررسی و ذخیره محصول
-                // ---------------------------------------------------------
-
-                DB::transaction(function () use (
-                    $name,
-                    $stock,
-                    $unit,
-                    $price,
-                    $consumerPrice,
-                    $categoryId,
-                    $fullDescription,
-                    $expirationDate
-                ) {
-
-                    // جستجوی محصول بر اساس نام
-                    $product = Product::where('name', $name)->first();
-
-                    // =====================================================
-                    // محصول جدید
-                    // =====================================================
-
-                    if (!$product) {
-
-                        $product = new Product();
-
-                        $product->name = $name;
-
-                        $product->slug =
-                            $this->generateUniqueSlug($name);
-
-                        $product->sku =
-                            $this->generateSku($name);
-
-                        $product->category_id = $categoryId;
-
-
-                        $product->description =
-                            $fullDescription !== ''
-                                ? $fullDescription
-                                : null;
-
-                        $product->short_description = null;
-
-                        $product->price = $price;
-
-                        $product->old_price = $consumerPrice;
-
-                        $product->discount_percentage = 0;
-
-                        $product->stock = max(0, $stock);
-
-                        $product->minimum_order_quantity = 1;
-
-                        $product->minimum_stock = 5;
-
-                        $product->expiration_date =
-                            $expirationDate;
-
-                        $product->weight = null;
-
-                        $product->unit =
-                            $unit !== ''
-                                ? $unit
-                                : null;
-
-                        $product->main_image = null;
-
-                        $product->status = 'active';
-
-                        $product->is_featured = 0;
-
-                        $product->is_active = 1;
-
-                        $product->save();
-
-                        // -------------------------------------------------
-                        // ثبت موجودی اولیه
-                        // -------------------------------------------------
-
-                        if ($stock > 0) {
-
-                            DB::table('inventory_transactions')->insert([
-                                'product_id' => $product->id,
-                                'user_id' => null,
-                                'type' => 'import',
-                                'quantity' => $stock,
-                                'before_stock' => 0,
-                                'after_stock' => $stock,
-                                'reason' => 'ورود موجودی اولیه از فایل Excel',
-                                'created_at' => now(),
-                                'updated_at' => now(),
-                            ]);
-                        }
-
-                        $this->newProducts++;
-
-                        echo "✓ محصول جدید اضافه شد: {$name}\n";
-
-                    }
-
-                    // =====================================================
-                    // محصول موجود
-                    // =====================================================
-
-                    else {
-
-                        $oldStock = (int) $product->stock;
-
-                        $newStock = max(0, $stock);
-
-                        // دسته‌بندی
-                        $product->category_id = $categoryId;
-
-                        // قیمت فروش
-                        if ($price > 0) {
-                            $product->price = $price;
-                        }
-
-                        // قیمت مصرف کننده
-                        if ($consumerPrice !== null) {
-                            $product->old_price =
-                                $consumerPrice;
-                        }
-
-                        // واحد
-                        if ($unit !== '') {
-                            $product->unit = $unit;
-                        }
-
-                        // توضیحات
-                        if ($fullDescription !== '') {
-                            $product->description =
-                                $fullDescription;
-                        }
-
-                        // تاریخ انقضا
-                        if ($expirationDate !== null) {
-                            $product->expiration_date =
-                                $expirationDate;
-                        }
-
-                        // موجودی
-                        $product->stock = $newStock;
-
-                        $product->save();
-
-                        // -------------------------------------------------
-                        // ثبت تغییر موجودی
-                        // -------------------------------------------------
-
-                        if ($oldStock != $newStock) {
-
-                            DB::table('inventory_transactions')->insert([
-                                'product_id' => $product->id,
-                                'user_id' => null,
-                                'type' => 'import',
-                                'quantity' => $newStock - $oldStock,
-                                'before_stock' => $oldStock,
-                                'after_stock' => $newStock,
-                                'reason' => 'به‌روزرسانی موجودی از فایل Excel',
-                                'created_at' => now(),
-                                'updated_at' => now(),
-                            ]);
-                        }
-
-                        $this->updatedProducts++;
-
-                        echo "↻ محصول به‌روزرسانی شد: {$name}\n";
-                    }
-                });
-
+                $this->importRow($row);
             } catch (\Throwable $e) {
+                $this->skippedRows++;
 
-                $this->failedRows++;
-
-                echo "✗ خطا در ردیف "
-                    . ($index + 2)
-                    . ":\n";
-
-                echo $e->getMessage() . "\n";
-
-                echo "----------------------------------------\n";
+                logger()->error('Product import error', [
+                    'row'   => $this->totalRows,
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
 
-        // -------------------------------------------------------------
-        // گزارش نهایی
-        // -------------------------------------------------------------
-
-        echo "\n";
-        echo "========================================\n";
-        echo "           گزارش نهایی Import\n";
-        echo "========================================\n";
-
-        echo "تعداد کل ردیف‌ها: "
-            . $this->totalRows
-            . "\n";
-
-        echo "محصولات جدید: "
-            . $this->newProducts
-            . "\n";
-
-        echo "محصولات به‌روزرسانی‌شده: "
-            . $this->updatedProducts
-            . "\n";
-
-        echo "ردیف‌های رد شده: "
-            . $this->skippedRows
-            . "\n";
-
-        echo "ردیف‌های دارای خطا: "
-            . $this->failedRows
-            . "\n";
-
-        echo "========================================\n";
+        logger()->info('Products import finished', [
+            'total_rows'       => $this->totalRows,
+            'new_products'     => $this->newProducts,
+            'updated_products' => $this->updatedProducts,
+            'skipped_rows'     => $this->skippedRows,
+            'uploaded_images'  => $this->uploadedImages,
+            'missing_images'   => $this->missingImages,
+        ]);
     }
 
-    // =================================================================
-    // Category
-    // =================================================================
-
-    private function getCategoryId(?string $categoryName): ?int
+    private function importRow($row): void
     {
-        $categoryName =
-            $this->normalizeText($categoryName);
+        /*
+        |--------------------------------------------------------------------------
+        | Product name
+        |--------------------------------------------------------------------------
+        */
 
-        $categories = [
+        $name = $this->getColumn($row, [
+            'نام کالا',
+            'نام كالا',
+            'nam_kala',
+            'name',
+        ]);
 
-            // دارو
-            'دارو' => 3,
-            'medicine' => 3,
+        $name = trim((string) $name);
 
-            // واکسن
-            'واکسن' => 2,
-            'vaccine' => 2,
+        if ($name === '') {
+            $this->skippedRows++;
+            return;
+        }
 
-            // پت شاپ
-            'پت شاپ' => 1,
-            'pet shop' => 1,
-            'petshop' => 1,
+        /*
+        |--------------------------------------------------------------------------
+        | Brand
+        |--------------------------------------------------------------------------
+        |
+        | Excel فعلی بعد از WithHeadingRow ستون برند را به brnd
+        | تبدیل می‌کند. بنابراین brnd بسیار مهم است.
+        |
+        */
+
+        $brandName = trim((string) $this->getColumn($row, [
+            'برند',
+            'brand',
+            'brnd',
+            'brand_name',
+        ]));
+
+        $brand = null;
+
+        if ($brandName !== '') {
+            $brand = $this->findOrCreateBrand($brandName);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Category
+        |--------------------------------------------------------------------------
+        */
+
+        $categoryValue = $this->getColumn($row, [
+            'دسته بندی',
+            'دسته‌بندی',
+            'دسته بندي',
+            'دسته‌بندي',
+            'category',
+            'category_name',
+            'dsth_bndy',
+        ]);
+
+        $categoryId = $this->normalizeCategory($categoryValue);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Stock
+        |--------------------------------------------------------------------------
+        */
+
+        $stockValue = $this->getColumn($row, [
+            'موجودی',
+            'موجودی کالا',
+            'mogody',
+            'stock',
+            'quantity',
+        ]);
+
+        $stock = $this->toInt($stockValue);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Unit
+        |--------------------------------------------------------------------------
+        */
+
+        $unit = trim((string) $this->getColumn($row, [
+            'واحد کالا',
+            'واحد كالا',
+            'oahd_kala',
+            'unit',
+        ]));
+
+        /*
+        |--------------------------------------------------------------------------
+        | Description
+        |--------------------------------------------------------------------------
+        */
+
+        $description = trim((string) $this->getColumn($row, [
+            'توضیحات',
+            'todyhat',
+            'description',
+        ]));
+
+        /*
+        |--------------------------------------------------------------------------
+        | Technical specifications
+        |--------------------------------------------------------------------------
+        */
+
+        $technical1 = trim((string) $this->getColumn($row, [
+            'مشخصات فنی 1',
+            'مشخصات فنی ۱',
+            'mshkhsat_fny_1',
+        ]));
+
+        $technical2 = trim((string) $this->getColumn($row, [
+            'مشخصات فنی 2',
+            'مشخصات فنی ۲',
+            'mshkhsat_fny_2',
+        ]));
+
+        $technicalParts = [];
+
+        if ($technical1 !== '') {
+            $technicalParts[] = 'مشخصات فنی 1: ' . $technical1;
+        }
+
+        if ($technical2 !== '') {
+            $technicalParts[] = 'مشخصات فنی 2: ' . $technical2;
+        }
+
+        if (!empty($technicalParts)) {
+            $description = trim(
+                $description .
+                ($description !== '' ? "\n\n" : '') .
+                implode("\n", $technicalParts)
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Price
+        |--------------------------------------------------------------------------
+        */
+
+        $priceValue = $this->getColumn($row, [
+            'فی فروش',
+            'fy frosh',
+            'fy_frosh',
+            'قیمت فروش',
+            'price',
+        ]);
+
+        $price = $this->toDecimal($priceValue);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Discount
+        |--------------------------------------------------------------------------
+        */
+
+        $discountValue = $this->getColumn($row, [
+            'درصد تخفیف',
+            'discount percentage',
+            'discount_percentage',
+        ]);
+
+        $discount = $this->toDecimal($discountValue);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Minimum order
+        |--------------------------------------------------------------------------
+        */
+
+        $minimumOrderValue = $this->getColumn($row, [
+            'حداقل',
+            'حداقل سفارش',
+            'minimum_order_quantity',
+        ]);
+
+        $minimumOrder = $this->toInt($minimumOrderValue);
+
+        if ($minimumOrder <= 0) {
+            $minimumOrder = 1;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Image path
+        |--------------------------------------------------------------------------
+        */
+
+        $imagePath = trim((string) $this->getColumn($row, [
+            'مسیر عکس',
+            'مسیر تصویر',
+            'مسیر عکس محصول',
+            'عکس',
+            'تصویر',
+            'msyr_aaks',
+            'image',
+            'image_path',
+            'main_image',
+        ]));
+
+        /*
+        |--------------------------------------------------------------------------
+        | Find existing product
+        |--------------------------------------------------------------------------
+        */
+
+        $sku = $this->generateSku($name);
+
+        $product = Product::withTrashed()
+            ->where('sku', $sku)
+            ->first();
+
+        /*
+        |--------------------------------------------------------------------------
+        | If SKU wasn't found, try product name
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$product) {
+            $product = Product::withTrashed()
+                ->where('name', $name)
+                ->first();
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Upload image
+        |--------------------------------------------------------------------------
+        */
+
+        $uploadedImagePath = null;
+
+        if ($imagePath !== '') {
+            $uploadedImagePath = $this->uploadProductImage(
+                $imagePath,
+                $sku
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create product
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$product) {
+            $product = Product::create([
+                'name'                   => $name,
+                'slug'                   => $this->uniqueSlug($name),
+                'sku'                    => $sku,
+                'category_id'            => $categoryId,
+                'brand_id'               => $brand?->id,
+                'description'            => $description !== '' ? $description : null,
+                'short_description'      => null,
+                'price'                  => max(0, $price),
+                'old_price'              => null,
+                'discount_percentage'    => max(0, $discount),
+                'stock'                  => max(0, $stock),
+                'minimum_order_quantity' => $minimumOrder,
+                'minimum_stock'          => 5,
+                'expiration_date'        => null,
+                'weight'                 => null,
+                'unit'                   => $unit !== '' ? $unit : null,
+                'main_image'             => $uploadedImagePath,
+                'status'                 => 'active',
+                'is_featured'            => false,
+                'is_active'              => true,
+            ]);
+
+            $this->newProducts++;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Inventory transaction
+            |--------------------------------------------------------------------------
+            */
+
+            if ($stock > 0) {
+                DB::table('inventory_transactions')->insert([
+                    'product_id' => $product->id,
+                    'type'       => 'in',
+                    'quantity'   => $stock,
+                    'reference'  => 'Excel Import',
+                    'notes'      => 'Initial stock from Excel import',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            logger()->info('Product imported', [
+                'name'       => $name,
+                'brand'      => $brandName,
+                'brand_id'   => $brand?->id,
+                'stock'      => $stock,
+                'image'      => $uploadedImagePath,
+            ]);
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Restore soft deleted product
+        |--------------------------------------------------------------------------
+        */
+
+        if ($product->trashed()) {
+            $product->restore();
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Existing stock
+        |--------------------------------------------------------------------------
+        */
+
+        $oldStock = (int) $product->stock;
+        $newStock = max(0, $stock);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update existing product
+        |--------------------------------------------------------------------------
+        */
+
+        $updateData = [
+            'category_id'            => $categoryId,
+            'description'            => $description !== ''
+                ? $description
+                : $product->description,
+            'stock'                  => $newStock,
+            'minimum_order_quantity' => $minimumOrder,
+            'unit'                   => $unit !== ''
+                ? $unit
+                : $product->unit,
+            'is_active'              => true,
         ];
 
-        foreach ($categories as $name => $id) {
+        /*
+        |--------------------------------------------------------------------------
+        | Update price only when Excel has a valid price
+        |--------------------------------------------------------------------------
+        */
 
-            if (
-                $categoryName ===
-                $this->normalizeText($name)
-            ) {
+        if ($price > 0) {
+            $updateData['price'] = $price;
+        }
 
-                // اطمینان از وجود Category
-                $exists = DB::table('categories')
-                    ->where('id', $id)
-                    ->exists();
+        /*
+        |--------------------------------------------------------------------------
+        | Update discount
+        |--------------------------------------------------------------------------
+        */
 
-                if (!$exists) {
-                    return null;
-                }
+        if ($discount >= 0) {
+            $updateData['discount_percentage'] = $discount;
+        }
 
-                return $id;
+        /*
+        |--------------------------------------------------------------------------
+        | Update brand
+        |--------------------------------------------------------------------------
+        */
+
+        if ($brand) {
+            $updateData['brand_id'] = $brand->id;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update image
+        |--------------------------------------------------------------------------
+        */
+
+        if ($uploadedImagePath) {
+            $updateData['main_image'] = $uploadedImagePath;
+        }
+
+        $product->update($updateData);
+
+        $this->updatedProducts++;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Inventory transaction when stock changes
+        |--------------------------------------------------------------------------
+        */
+
+        if ($oldStock !== $newStock) {
+            $difference = $newStock - $oldStock;
+
+            DB::table('inventory_transactions')->insert([
+                'product_id' => $product->id,
+                'type'       => $difference > 0 ? 'in' : 'out',
+                'quantity'   => abs($difference),
+                'reference'  => 'Excel Import',
+                'notes'      => "Stock changed from {$oldStock} to {$newStock}",
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        logger()->info('Product updated', [
+            'name'       => $name,
+            'brand'      => $brandName,
+            'brand_id'   => $brand?->id,
+            'stock'      => $newStock,
+            'image'      => $uploadedImagePath,
+        ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Find or create brand
+    |--------------------------------------------------------------------------
+    */
+
+    private function findOrCreateBrand(string $brandName): Brand
+    {
+        $brandName = trim($brandName);
+
+        $normalized = $this->normalizeText($brandName);
+
+        if ($normalized === '') {
+            throw new \RuntimeException('Brand name is empty.');
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Check cache
+        |--------------------------------------------------------------------------
+        */
+
+        if (isset($this->brandCache[$normalized])) {
+            return $this->brandCache[$normalized];
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Check database
+        |--------------------------------------------------------------------------
+        */
+
+        $brand = Brand::query()
+            ->whereRaw(
+                'LOWER(name) = ?',
+                [mb_strtolower($brandName, 'UTF-8')]
+            )
+            ->first();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create new brand
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$brand) {
+            $slug = $this->uniqueBrandSlug($brandName);
+
+            $brand = Brand::create([
+                'name'      => $brandName,
+                'slug'      => $slug,
+                'logo'      => null,
+                'is_active' => true,
+            ]);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Save in cache
+        |--------------------------------------------------------------------------
+        */
+
+        $this->brandCache[$normalized] = $brand;
+
+        return $brand;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Upload product image
+    |--------------------------------------------------------------------------
+    */
+
+    private function uploadProductImage(
+        string $sourcePath,
+        string $sku
+    ): ?string {
+        /*
+        |--------------------------------------------------------------------------
+        | Clean Excel path
+        |--------------------------------------------------------------------------
+        */
+
+        $sourcePath = trim($sourcePath);
+
+        // Remove quotes if Excel value contains them
+        $sourcePath = trim($sourcePath, "\"'");
+
+        /*
+        |--------------------------------------------------------------------------
+        | Convert Windows slashes
+        |--------------------------------------------------------------------------
+        */
+
+        $sourcePath = str_replace(
+            ['/', '\\'],
+            DIRECTORY_SEPARATOR,
+            $sourcePath
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Check absolute path
+        |--------------------------------------------------------------------------
+        */
+
+        $possiblePaths = [
+            $sourcePath,
+        ];
+
+        /*
+        |--------------------------------------------------------------------------
+        | If relative path, try project root
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$this->isAbsolutePath($sourcePath)) {
+            $possiblePaths[] = base_path($sourcePath);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Find actual file
+        |--------------------------------------------------------------------------
+        */
+
+        $actualPath = null;
+
+        foreach ($possiblePaths as $path) {
+            if (is_file($path)) {
+                $actualPath = $path;
+                break;
             }
         }
 
-        return null;
+        if (!$actualPath) {
+            $this->missingImages++;
+
+            logger()->warning('Product image not found', [
+                'sku'  => $sku,
+                'path' => $sourcePath,
+            ]);
+
+            return null;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Detect extension
+        |--------------------------------------------------------------------------
+        */
+
+        $extension = strtolower(
+            pathinfo($actualPath, PATHINFO_EXTENSION)
+        );
+
+        $allowedExtensions = [
+            'jpg',
+            'jpeg',
+            'png',
+            'webp',
+            'gif',
+        ];
+
+        if (!in_array($extension, $allowedExtensions, true)) {
+            $this->missingImages++;
+
+            logger()->warning('Unsupported product image format', [
+                'sku'       => $sku,
+                'path'      => $actualPath,
+                'extension' => $extension,
+            ]);
+
+            return null;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create unique filename
+        |--------------------------------------------------------------------------
+        */
+
+        $filename = $sku . '.' . $extension;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Store in:
+        | storage/app/public/products
+        |--------------------------------------------------------------------------
+        */
+
+        $destination = 'products/' . $filename;
+
+        try {
+            $contents = file_get_contents($actualPath);
+
+            if ($contents === false) {
+                $this->missingImages++;
+
+                logger()->warning('Could not read product image', [
+                    'path' => $actualPath,
+                ]);
+
+                return null;
+            }
+
+            Storage::disk('public')->put(
+                $destination,
+                $contents
+            );
+
+            $this->uploadedImages++;
+
+            logger()->info('Product image uploaded', [
+                'source'      => $actualPath,
+                'destination' => $destination,
+                'sku'         => $sku,
+            ]);
+
+            return $destination;
+
+        } catch (\Throwable $e) {
+            $this->missingImages++;
+
+            logger()->error('Product image upload failed', [
+                'path'  => $actualPath,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
-    // =================================================================
-    // Generate SKU
-    // =================================================================
+    /*
+    |--------------------------------------------------------------------------
+    | Check Windows / Linux absolute path
+    |--------------------------------------------------------------------------
+    */
+
+    private function isAbsolutePath(string $path): bool
+    {
+        return
+            str_starts_with($path, DIRECTORY_SEPARATOR) ||
+            preg_match('/^[A-Za-z]:[\/\\\\]/', $path) === 1;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Generate SKU
+    |--------------------------------------------------------------------------
+    */
 
     private function generateSku(string $name): string
     {
-        $hash = strtoupper(
+        return 'VS-' . strtoupper(
             substr(
-                hash(
-                    'sha256',
-                    $this->normalizeText($name)
-                ),
+                md5($this->normalizeText($name)),
                 0,
                 10
             )
         );
-
-        $sku = 'VET-' . $hash;
-
-        $counter = 1;
-
-        $originalSku = $sku;
-
-        while (
-            DB::table('products')
-                ->where('sku', $sku)
-                ->exists()
-        ) {
-
-            $sku =
-                $originalSku
-                . '-'
-                . $counter;
-
-            $counter++;
-        }
-
-        return $sku;
     }
 
-    // =================================================================
-    // Generate Unique Slug
-    // =================================================================
+    /*
+    |--------------------------------------------------------------------------
+    | Unique product slug
+    |--------------------------------------------------------------------------
+    */
 
-    private function generateUniqueSlug(string $name): string
+    private function uniqueSlug(string $name): string
     {
         $base = Str::slug($name);
 
-        // اگر Str::slug برای فارسی مقدار خالی برگرداند
         if ($base === '') {
-
-            $base =
-                'product-'
-                . substr(
-                    hash(
-                        'sha256',
-                        $this->normalizeText($name)
-                    ),
-                    0,
-                    12
-                );
+            $base = 'product-' . Str::random(8);
         }
 
         $slug = $base;
-
         $counter = 1;
 
         while (
-            DB::table('products')
+            Product::withTrashed()
                 ->where('slug', $slug)
                 ->exists()
         ) {
-
-            $slug =
-                $base
-                . '-'
-                . $counter;
-
-            $counter++;
+            $slug = $base . '-' . $counter++;
         }
 
         return $slug;
     }
 
-    // =================================================================
-    // Convert To Integer
-    // =================================================================
+    /*
+    |--------------------------------------------------------------------------
+    | Unique brand slug
+    |--------------------------------------------------------------------------
+    */
 
-    private function toInt($value): int
+    private function uniqueBrandSlug(string $name): string
     {
-        if (
-            $value === null ||
-            $value === ''
+        $base = Str::slug($name);
+
+        if ($base === '') {
+            $base = 'brand-' . Str::random(8);
+        }
+
+        $slug = $base;
+        $counter = 1;
+
+        while (
+            Brand::where('slug', $slug)->exists()
         ) {
-            return 0;
+            $slug = $base . '-' . $counter++;
         }
 
-        if (is_numeric($value)) {
-            return (int) $value;
-        }
-
-        $value = str_replace(
-            [
-                ',',
-                '٬',
-                ' ',
-                '‌',
-            ],
-            '',
-            (string) $value
-        );
-
-        // تبدیل اعداد فارسی به انگلیسی
-        $value = strtr(
-            $value,
-            [
-                '۰' => '0',
-                '۱' => '1',
-                '۲' => '2',
-                '۳' => '3',
-                '۴' => '4',
-                '۵' => '5',
-                '۶' => '6',
-                '۷' => '7',
-                '۸' => '8',
-                '۹' => '9',
-            ]
-        );
-
-        return (int) $value;
+        return $slug;
     }
 
-    // =================================================================
-    // Convert To Decimal
-    // =================================================================
+    /*
+    |--------------------------------------------------------------------------
+    | Get column with aliases
+    |--------------------------------------------------------------------------
+    */
 
-    private function toDecimal($value): ?float
+    private function getColumn($row, array $keys): mixed
     {
-        if (
-            $value === null ||
-            $value === ''
-        ) {
-            return null;
-        }
+        /*
+        |--------------------------------------------------------------------------
+        | First: direct column name
+        |--------------------------------------------------------------------------
+        */
 
-        // تبدیل اعداد فارسی
-        $value = strtr(
-            (string) $value,
-            [
-                '۰' => '0',
-                '۱' => '1',
-                '۲' => '2',
-                '۳' => '3',
-                '۴' => '4',
-                '۵' => '5',
-                '۶' => '6',
-                '۷' => '7',
-                '۸' => '8',
-                '۹' => '9',
-            ]
-        );
-
-        $value = str_replace(
-            [
-                ',',
-                '٬',
-                ' ',
-                '‌',
-            ],
-            '',
-            $value
-        );
-
-        if (!is_numeric($value)) {
-            return null;
-        }
-
-        return (float) $value;
-    }
-
-    // =================================================================
-    // Parse Expiration Date
-    // =================================================================
-
-    private function parseExpirationDate($value): ?string
-    {
-        if (
-            $value === null ||
-            $value === ''
-        ) {
-            return null;
-        }
-
-        $value = trim((string) $value);
-
-        // تبدیل اعداد فارسی
-        $value = strtr(
-            $value,
-            [
-                '۰' => '0',
-                '۱' => '1',
-                '۲' => '2',
-                '۳' => '3',
-                '۴' => '4',
-                '۵' => '5',
-                '۶' => '6',
-                '۷' => '7',
-                '۸' => '8',
-                '۹' => '9',
-            ]
-        );
-
-        // فرمت:
-        // 2028/06
-        // 2028-06
-
-        if (
-            preg_match(
-                '/^(\d{4})[\/\-](\d{1,2})$/',
-                $value,
-                $matches
-            )
-        ) {
-
-            $year =
-                (int) $matches[1];
-
-            $month =
-                (int) $matches[2];
-
-            if (
-                $month >= 1 &&
-                $month <= 12
-            ) {
-
-                return sprintf(
-                    '%04d-%02d-01',
-                    $year,
-                    $month
-                );
+        foreach ($keys as $key) {
+            if (isset($row[$key])) {
+                return $row[$key];
             }
         }
 
-        // فرمت:
-        // 2028/06/15
-        // 2028-06-15
+        /*
+        |--------------------------------------------------------------------------
+        | Second: normalized column name
+        |--------------------------------------------------------------------------
+        */
 
-        if (
-            preg_match(
-                '/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/',
-                $value,
-                $matches
-            )
-        ) {
+        $normalizedKeys = [];
 
-            $year =
-                (int) $matches[1];
+        foreach ($keys as $key) {
+            $normalizedKeys[] = $this->normalizeHeader((string) $key);
+        }
 
-            $month =
-                (int) $matches[2];
+        foreach ($row as $rowKey => $value) {
+            $normalizedRowKey = $this->normalizeHeader(
+                (string) $rowKey
+            );
 
-            $day =
-                (int) $matches[3];
-
-            if (
-                checkdate(
-                    $month,
-                    $day,
-                    $year
-                )
-            ) {
-
-                return sprintf(
-                    '%04d-%02d-%02d',
-                    $year,
-                    $month,
-                    $day
-                );
+            if (in_array(
+                $normalizedRowKey,
+                $normalizedKeys,
+                true
+            )) {
+                return $value;
             }
         }
 
         return null;
     }
 
-    // =================================================================
-    // Normalize Persian Text
-    // =================================================================
+    /*
+    |--------------------------------------------------------------------------
+    | Normalize Excel header
+    |--------------------------------------------------------------------------
+    */
 
-    private function normalizeText($text): string
+    private function normalizeHeader(string $value): string
     {
-        $text = trim((string) $text);
+        $value = trim($value);
 
-        // تبدیل حروف عربی به فارسی
-        $text = str_replace(
+        $value = str_replace(
             [
                 'ي',
                 'ى',
                 'ك',
+                'ۀ',
+                'ة',
+                'ؤ',
+                'إ',
+                'أ',
             ],
             [
                 'ی',
                 'ی',
                 'ک',
+                'ه',
+                'ه',
+                'و',
+                'ا',
+                'ا',
             ],
-            $text
+            $value
         );
 
-        // حذف فاصله‌های اضافی
-        $text = preg_replace(
+        $value = str_replace(
+            [
+                "\u{200C}",
+                "\u{200D}",
+                '_',
+                '-',
+            ],
+            ' ',
+            $value
+        );
+
+        $value = preg_replace(
             '/\s+/u',
             ' ',
-            $text
+            $value
         );
 
-        return mb_strtolower($text);
+        return mb_strtolower(
+            trim($value),
+            'UTF-8'
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Normalize text
+    |--------------------------------------------------------------------------
+    */
+
+    private function normalizeText(string $value): string
+    {
+        $value = $this->normalizeHeader($value);
+
+        return preg_replace(
+            '/\s+/u',
+            ' ',
+            trim($value)
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Normalize category
+    |--------------------------------------------------------------------------
+    */
+
+    private function normalizeCategory($value): int
+    {
+        $value = $this->normalizeText(
+            (string) $value
+        );
+
+        return $this->categoryCache[$value] ?? 3;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Convert Persian / Arabic digits to integer
+    |--------------------------------------------------------------------------
+    */
+
+    private function toInt($value): int
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+
+        $value = (string) $value;
+
+        $value = strtr($value, [
+            '۰' => '0',
+            '۱' => '1',
+            '۲' => '2',
+            '۳' => '3',
+            '۴' => '4',
+            '۵' => '5',
+            '۶' => '6',
+            '۷' => '7',
+            '۸' => '8',
+            '۹' => '9',
+
+            '٠' => '0',
+            '١' => '1',
+            '٢' => '2',
+            '٣' => '3',
+            '٤' => '4',
+            '٥' => '5',
+            '٦' => '6',
+            '٧' => '7',
+            '٨' => '8',
+            '٩' => '9',
+        ]);
+
+        $value = str_replace(
+            [
+                ',',
+                '٬',
+                ' ',
+            ],
+            '',
+            $value
+        );
+
+        return (int) preg_replace(
+            '/[^0-9\-]/',
+            '',
+            $value
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Convert Persian / Arabic digits to decimal
+    |--------------------------------------------------------------------------
+    */
+
+    private function toDecimal($value): float
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+
+        $value = (string) $value;
+
+        $value = strtr($value, [
+            '۰' => '0',
+            '۱' => '1',
+            '۲' => '2',
+            '۳' => '3',
+            '۴' => '4',
+            '۵' => '5',
+            '۶' => '6',
+            '۷' => '7',
+            '۸' => '8',
+            '۹' => '9',
+
+            '٠' => '0',
+            '١' => '1',
+            '٢' => '2',
+            '٣' => '3',
+            '٤' => '4',
+            '٥' => '5',
+            '٦' => '6',
+            '٧' => '7',
+            '٨' => '8',
+            '٩' => '9',
+
+            '٫' => '.',
+        ]);
+
+        $value = str_replace(
+            [
+                ',',
+                '٬',
+                ' ',
+            ],
+            '',
+            $value
+        );
+
+        $value = preg_replace(
+            '/[^0-9.\-]/',
+            '',
+            $value
+        );
+
+        return (float) $value;
     }
 }

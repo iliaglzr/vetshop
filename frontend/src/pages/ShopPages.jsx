@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   CheckCircle,
   Clock,
@@ -14,143 +14,350 @@ import {
   ArrowRight,
   ShieldCheck,
   CircleDollarSign,
-} from 'lucide-react';
-import { api } from '../api';
-
-const money = (n) =>
-  new Intl.NumberFormat('fa-IR').format(Math.round(n || 0)) + ' تومان';
+  X,
+  ShoppingCart,
+} from "lucide-react";
+import { api } from "../api";
 
 const paymentMethods = [
   {
-    value: 'bank_transfer',
-    title: 'واریز بانکی',
-    description: 'واریز مبلغ به حساب فروشگاه و ارسال تصویر فیش',
+    value: "bank_transfer",
+    title: "واریز بانکی",
+    description: "واریز مبلغ به حساب فروشگاه و ارسال تصویر فیش",
     icon: Building2,
-    badge: 'فیش واریزی',
+    badge: "فیش واریزی",
   },
   {
-    value: 'check',
-    title: 'پرداخت با چک',
-    description: 'ارسال تصویر چک برای بررسی و تأیید مدیریت',
+    value: "check",
+    title: "پرداخت با چک",
+    description: "ارسال تصویر چک برای بررسی و تأیید مدیریت",
     icon: FileCheck2,
-    badge: 'تصویر چک',
+    badge: "تصویر چک",
   },
   {
-    value: 'online',
-    title: 'پرداخت آنلاین',
-    description: 'پرداخت مستقیم از طریق درگاه اینترنتی',
+    value: "online",
+    title: "پرداخت آنلاین",
+    description: "پرداخت مستقیم از طریق درگاه اینترنتی",
     icon: CreditCard,
-    badge: 'درگاه آنلاین',
+    badge: "درگاه آنلاین",
   },
 ];
 
+const money = (n) =>
+  new Intl.NumberFormat("fa-IR").format(Math.round(Number(n) || 0)) + " ریال";
+
 export function Cart() {
   const [c, setC] = useState(null);
+
   const nav = useNavigate();
 
-  const load = () =>
-    api.get('/cart').then((r) => setC(r.data));
+  const load = () => {
+    api.get("/cart").then((r) => setC(r.data));
+  };
 
   useEffect(() => {
     load();
   }, []);
 
-  if (!localStorage.getItem('token')) return <></>;
+  if (!localStorage.getItem("token")) return <></>;
 
-  const total =
-    c?.items?.reduce(
-      (sum, item) => sum + item.unit_price * item.quantity,
-      0
-    ) || 0;
+  const items = c?.items || [];
+
+  // جمع مبلغ کالاها
+  const productsTotal = items.reduce(
+    (sum, item) =>
+      sum + Number(item.unit_price || 0) * Number(item.quantity || 0),
+    0,
+  );
+
+  // تخفیف مالی فقط برای تخفیف درصدی
+  const discountTotal = items.reduce(
+    (sum, item) => sum + Number(item.discount || 0),
+    0,
+  );
+
+  // مبلغ بعد از تخفیف
+  const afterDiscount = Math.max(0, productsTotal - discountTotal);
+
+  // هزینه ارسال و مالیات از Backend
+  // مشتری اجازه تغییر آنها را ندارد.
+  const shipping = Number(c?.shipping_cost || 0);
+  const taxPercent = Number(c?.tax_percent || 0);
+
+  const taxAmount = afterDiscount * (taxPercent / 100);
+
+  const payable = afterDiscount + shipping + taxAmount;
+
+  async function increase(item) {
+    await api.patch("/cart/items/" + item.id, {
+      quantity: item.quantity + 1,
+    });
+
+    load();
+  }
+
+  async function decrease(item) {
+    if (item.quantity > (item.product.minimum_order_quantity || 1)) {
+      await api.patch("/cart/items/" + item.id, {
+        quantity: item.quantity - 1,
+      });
+    } else {
+      await api.delete("/cart/items/" + item.id);
+    }
+
+    load();
+  }
+
+  async function removeItem(item) {
+    await api.delete("/cart/items/" + item.id);
+    load();
+  }
 
   return (
-    <section className="wrap section">
-      <div className="dashboard-head">
+    <section className="wrap section cart-page">
+      {/* عنوان */}
+      <div className="dashboard-head cart-page-head">
         <div>
           <span className="eyebrow">خرید</span>
           <h2>سبد خرید</h2>
         </div>
       </div>
 
-      {!c?.items?.length ? (
-        <div className="empty">
-          سبد خرید شما خالی است.
+      {!items.length ? (
+        <div className="cart-empty">
+          <ShoppingCart size={48} />
+          <h3>سبد خرید شما خالی است</h3>
+          <p>برای اضافه کردن کالا، به فروشگاه مراجعه کنید.</p>
+
+          <button className="btn" onClick={() => nav("/products")}>
+            مشاهده محصولات
+          </button>
         </div>
       ) : (
-        <div className="cart-layout">
-          <div>
-            {c.items.map((i) => (
-              <div className="cart-item" key={i.id}>
-                <div>
-                  <b>{i.product.name}</b>
-                  <small>{money(i.unit_price)}</small>
-                </div>
-
-                <div className="qty">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await api.patch('/cart/items/' + i.id, {
-                        quantity: i.quantity + 1,
-                      });
-                      load();
-                    }}
-                  >
-                    <Plus size={17} />
-                  </button>
-
-                  <b>{i.quantity}</b>
-
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (
-                        i.quantity >
-                        i.product.minimum_order_quantity
-                      ) {
-                        await api.patch('/cart/items/' + i.id, {
-                          quantity: i.quantity - 1,
-                        });
-                      } else {
-                        await api.delete('/cart/items/' + i.id);
-                      }
-
-                      load();
-                    }}
-                  >
-                    <Minus size={17} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <aside className="summary">
-            <h3>خلاصه سفارش</h3>
-
-            <p>
-              تعداد اقلام:{' '}
-              <strong>{c.items.length}</strong>
-            </p>
-
-            <div className="checkout-total">
-              <span>مبلغ قابل پرداخت</span>
-              <strong>{money(total)}</strong>
+        <>
+          {/* جدول */}
+          <div className="cart-table-wrapper">
+            <div className="cart-section-title">
+              <h3>مشخصات کالا و خدمات</h3>
             </div>
 
-            <button
-              className="btn full"
-              onClick={() => nav('/checkout')}
-            >
-              ادامه و ثبت سفارش
-            </button>
-          </aside>
-        </div>
+            <div className="cart-table">
+              {/* Header */}
+              <div className="cart-row cart-header">
+                <div>ردیف</div>
+
+                <div>نام کالا / دارو</div>
+
+                <div>برند</div>
+
+                <div>تعداد</div>
+
+                <div>واحد</div>
+
+                <div>
+                  قیمت واحد
+                  <br />
+                  (ریال)
+                </div>
+
+                <div>
+                  تخفیف
+                  <br />
+                  (ریال)
+                </div>
+
+                <div>
+                  مبلغ کل
+                  <br />
+                  (ریال)
+                </div>
+
+                <div></div>
+              </div>
+
+              {/* Rows */}
+              {items.map((item, index) => {
+                const unitPrice = Number(item.unit_price || 0);
+
+                const quantity = Number(item.quantity || 0);
+
+                const freeQuantity = Number(item.free_quantity || 0);
+
+                const totalQuantity = quantity + freeQuantity;
+
+                const discount = Number(item.discount || 0);
+
+                const rowTotal = Math.max(0, unitPrice * quantity - discount);
+
+                return (
+                  <div className="cart-row" key={item.id}>
+                    {/* ردیف */}
+                    <div className="row-number">{index + 1}</div>
+
+                    {/* نام */}
+                    <div className="product-name-cell">
+                      <strong>{item.product?.name || "نام محصول"}</strong>
+
+                      {item.product?.sku && (
+                        <small>SKU: {item.product.sku}</small>
+                      )}
+                    </div>
+
+                    {/* برند */}
+                    <div className="brand-cell">
+                      {item.product?.brand?.name || "برند عمومی"}
+                    </div>
+
+                    {/* تعداد */}
+                    <div>
+                      <div className="cart-qty">
+                        <button type="button" onClick={() => increase(item)}>
+                          <Plus size={15} />
+                        </button>
+
+                        <div className="cart-qty-info">
+                          <div className="cart-qty">
+                            <button
+                              type="button"
+                              onClick={() => increase(item)}
+                            >
+                              <Plus size={15} />
+                            </button>
+
+                            <strong>{quantity}</strong>
+
+                            <button
+                              type="button"
+                              onClick={() => decrease(item)}
+                            >
+                              <Minus size={15} />
+                            </button>
+                          </div>
+
+                          {freeQuantity > 0 && (
+                            <div className="gift-info">
+                              <span>+ {freeQuantity} عدد رایگان</span>
+                              <small>مجموع دریافتی: {totalQuantity}</small>
+                            </div>
+                          )}
+                        </div>
+
+                        <button type="button" onClick={() => decrease(item)}>
+                          <Minus size={15} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* واحد */}
+                    <div className="unit-cell">
+                      {item.product?.unit || "عدد / بسته"}
+                    </div>
+
+                    {/* قیمت واحد */}
+                    <div className="price-cell">{money(unitPrice)}</div>
+
+                    {/* تخفیف */}
+                    <div className="discount-cell">
+                      {freeQuantity > 0 ? (
+                        <div className="gift-discount">
+                          <strong>جنسی</strong>
+                          <small>{freeQuantity} عدد رایگان</small>
+                        </div>
+                      ) : (
+                        money(discount)
+                      )}
+                    </div>
+
+                    {/* مبلغ */}
+                    <div className="total-cell">{money(rowTotal)}</div>
+
+                    {/* حذف */}
+                    <div>
+                      <button
+                        type="button"
+                        className="remove-cart-item"
+                        onClick={() => removeItem(item)}
+                        title="حذف کالا"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* افزودن کالا */}
+            <div className="cart-add-row">
+              <button
+                type="button"
+                className="cart-add-btn"
+                onClick={() => nav("/products")}
+              >
+                <Plus size={19} />
+                افزودن ردیف کالا
+              </button>
+            </div>
+          </div>
+
+          {/* بخش جمع فاکتور */}
+          <div className="cart-bottom">
+            <div className="cart-summary">
+              <div className="summary-line">
+                <span>جمع مبلغ کالاها:</span>
+                <strong>{money(productsTotal)}</strong>
+              </div>
+
+              <div className="summary-line">
+                <span>جمع تخفیف:</span>
+                <strong>{money(discountTotal)}</strong>
+              </div>
+
+              <div className="summary-line">
+                <span>هزینه ارسال:</span>
+
+                <strong>{shipping > 0 ? money(shipping) : "رایگان"}</strong>
+              </div>
+
+              <div className="summary-line">
+                <span>مالیات و عوارض:</span>
+
+                <strong>{taxPercent > 0 ? `${taxPercent}%` : "۰٪"}</strong>
+              </div>
+
+              <div className="summary-line">
+                <span>مبلغ مالیات:</span>
+                <strong>{money(taxAmount)}</strong>
+              </div>
+
+              <div className="payable-box">
+                <span>مبلغ قابل پرداخت:</span>
+
+                <strong>{money(payable)}</strong>
+              </div>
+
+              <button
+                className="btn full cart-checkout-btn"
+                onClick={() => nav("/checkout")}
+              >
+                ادامه و ثبت سفارش
+              </button>
+            </div>
+          </div>
+
+          {/* توضیحات */}
+          <div className="cart-notes">
+            <div className="cart-section-title">
+              <h3>شرایط و توضیحات</h3>
+            </div>
+
+            <textarea placeholder="شرایط پرداخت، زمان تحویل، شرایط نگهداری و حمل، توضیحات مربوط به کالاها و سایر موارد..." />
+          </div>
+        </>
       )}
     </section>
   );
 }
-
 
 /* =========================================================
    CHECKOUT
@@ -159,14 +366,14 @@ export function Cart() {
 export function Checkout() {
   const nav = useNavigate();
 
-  const [method, setMethod] = useState('bank_transfer');
+  const [method, setMethod] = useState("bank_transfer");
 
   const [form, setForm] = useState({
-    province: '',
-    city: '',
-    address: '',
-    postal_code: '',
-    phone: '',
+    province: "",
+    city: "",
+    address: "",
+    postal_code: "",
+    phone: "",
   });
 
   const [order, setOrder] = useState(null);
@@ -180,7 +387,7 @@ export function Checkout() {
     setLoading(true);
 
     try {
-      const r = await api.post('/orders', {
+      const r = await api.post("/orders", {
         payment_method: method,
         shipping_address: form,
       });
@@ -190,8 +397,8 @@ export function Checkout() {
       const errors = e.response?.data?.errors;
 
       const message = errors
-        ? Object.values(errors).flat().join('\n')
-        : e.response?.data?.message || 'ثبت سفارش ناموفق بود.';
+        ? Object.values(errors).flat().join("\n")
+        : e.response?.data?.message || "ثبت سفارش ناموفق بود.";
 
       alert(message);
     } finally {
@@ -213,7 +420,7 @@ export function Checkout() {
    */
 
   if (order) {
-    if (order.payment_method === 'online') {
+    if (order.payment_method === "online") {
       return <OnlinePayment order={order} />;
     }
 
@@ -225,13 +432,10 @@ export function Checkout() {
       <div className="checkout-title">
         <span className="eyebrow">مرحله نهایی خرید</span>
         <h2>ثبت سفارش</h2>
-        <p>
-          اطلاعات ارسال و روش پرداخت خود را انتخاب کنید.
-        </p>
+        <p>اطلاعات ارسال و روش پرداخت خود را انتخاب کنید.</p>
       </div>
 
       <form className="checkout" onSubmit={submit}>
-
         {/* ================= ADDRESS ================= */}
 
         <div className="panel checkout-panel">
@@ -242,28 +446,26 @@ export function Checkout() {
 
             <div>
               <h3>آدرس ارسال</h3>
-              <p>
-                اطلاعات محل دریافت سفارش را وارد کنید.
-              </p>
+              <p>اطلاعات محل دریافت سفارش را وارد کنید.</p>
             </div>
           </div>
 
           <div className="checkout-fields">
             {Object.keys(form).map((key) => {
               const placeholders = {
-                province: 'استان',
-                city: 'شهر',
-                address: 'آدرس کامل',
-                postal_code: 'کد پستی',
-                phone: 'شماره تماس',
+                province: "استان",
+                city: "شهر",
+                address: "آدرس کامل",
+                postal_code: "کد پستی",
+                phone: "شماره تماس",
               };
 
               return (
                 <div
                   className={
-                    key === 'address'
-                      ? 'checkout-field checkout-field-full'
-                      : 'checkout-field'
+                    key === "address"
+                      ? "checkout-field checkout-field-full"
+                      : "checkout-field"
                   }
                   key={key}
                 >
@@ -278,14 +480,13 @@ export function Checkout() {
                       })
                     }
                     placeholder={placeholders[key]}
-                    required={key !== 'postal_code'}
+                    required={key !== "postal_code"}
                   />
                 </div>
               );
             })}
           </div>
         </div>
-
 
         {/* ================= PAYMENT ================= */}
 
@@ -297,9 +498,7 @@ export function Checkout() {
 
             <div>
               <h3>روش پرداخت</h3>
-              <p>
-                یکی از روش‌های پرداخت را انتخاب کنید.
-              </p>
+              <p>یکی از روش‌های پرداخت را انتخاب کنید.</p>
             </div>
           </div>
 
@@ -311,18 +510,14 @@ export function Checkout() {
               return (
                 <label
                   key={item.value}
-                  className={`payment-method ${
-                    active ? 'active' : ''
-                  }`}
+                  className={`payment-method ${active ? "active" : ""}`}
                 >
                   <input
                     type="radio"
                     name="payment_method"
                     value={item.value}
                     checked={active}
-                    onChange={() =>
-                      setMethod(item.value)
-                    }
+                    onChange={() => setMethod(item.value)}
                   />
 
                   <div className="payment-method-icon">
@@ -346,7 +541,7 @@ export function Checkout() {
             })}
           </div>
 
-          {method === 'bank_transfer' && (
+          {method === "bank_transfer" && (
             <div className="payment-info bank">
               <Building2 size={20} />
 
@@ -354,15 +549,14 @@ export function Checkout() {
                 <strong>پرداخت از طریق واریز بانکی</strong>
 
                 <p>
-                  پس از ثبت سفارش، اطلاعات حساب نمایش داده
-                  می‌شود و می‌توانید تصویر فیش واریزی را
-                  ارسال کنید.
+                  پس از ثبت سفارش، اطلاعات حساب نمایش داده می‌شود و می‌توانید
+                  تصویر فیش واریزی را ارسال کنید.
                 </p>
               </div>
             </div>
           )}
 
-          {method === 'check' && (
+          {method === "check" && (
             <div className="payment-info check">
               <FileCheck2 size={20} />
 
@@ -370,14 +564,14 @@ export function Checkout() {
                 <strong>پرداخت با چک</strong>
 
                 <p>
-                  پس از ثبت سفارش، تصویر چک را ارسال کنید
-                  تا توسط مدیریت بررسی و تأیید شود.
+                  پس از ثبت سفارش، تصویر چک را ارسال کنید تا توسط مدیریت بررسی و
+                  تأیید شود.
                 </p>
               </div>
             </div>
           )}
 
-          {method === 'online' && (
+          {method === "online" && (
             <div className="payment-info online">
               <ShieldCheck size={20} />
 
@@ -385,30 +579,25 @@ export function Checkout() {
                 <strong>پرداخت امن آنلاین</strong>
 
                 <p>
-                  بعد از ثبت سفارش به مرحله پرداخت آنلاین
-                  منتقل می‌شوید. در این روش نیازی به
-                  ارسال فیش نیست.
+                  بعد از ثبت سفارش به مرحله پرداخت آنلاین منتقل می‌شوید. در این
+                  روش نیازی به ارسال فیش نیست.
                 </p>
               </div>
             </div>
           )}
 
-          <button
-            className="btn full checkout-submit"
-            disabled={loading}
-          >
+          <button className="btn full checkout-submit" disabled={loading}>
             {loading
-              ? 'در حال ثبت سفارش...'
-              : method === 'online'
-              ? 'ادامه و پرداخت آنلاین'
-              : 'ثبت سفارش و ادامه'}
+              ? "در حال ثبت سفارش..."
+              : method === "online"
+                ? "ادامه و پرداخت آنلاین"
+                : "ثبت سفارش و ادامه"}
           </button>
         </div>
       </form>
     </section>
   );
 }
-
 
 /* =========================================================
    PAYMENT UPLOAD
@@ -419,7 +608,7 @@ function PaymentUpload({ order }) {
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const isCheck = order.payment_method === 'check';
+  const isCheck = order.payment_method === "check";
 
   async function send(e) {
     e.preventDefault();
@@ -427,8 +616,8 @@ function PaymentUpload({ order }) {
     if (!file) {
       alert(
         isCheck
-          ? 'لطفاً تصویر چک را انتخاب کنید.'
-          : 'لطفاً تصویر فیش واریزی را انتخاب کنید.'
+          ? "لطفاً تصویر چک را انتخاب کنید."
+          : "لطفاً تصویر فیش واریزی را انتخاب کنید.",
       );
 
       return;
@@ -440,7 +629,7 @@ function PaymentUpload({ order }) {
 
     const fd = new FormData();
 
-    fd.append('receipt', file);
+    fd.append("receipt", file);
 
     /*
      * Backend فقط این دو مقدار را قبول می‌کند:
@@ -448,35 +637,24 @@ function PaymentUpload({ order }) {
      * bank_transfer
      * check
      */
-    fd.append(
-      'method',
-      isCheck ? 'check' : 'bank_transfer'
-    );
+    fd.append("method", isCheck ? "check" : "bank_transfer");
 
     try {
-      await api.post(
-        `/orders/${order.id}/payment`,
-        fd,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
+      await api.post(`/orders/${order.id}/payment`, fd, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
       setDone(true);
     } catch (e) {
-      console.error(
-        'PAYMENT UPLOAD ERROR:',
-        e.response?.data
-      );
+      console.error("PAYMENT UPLOAD ERROR:", e.response?.data);
 
       const errors = e.response?.data?.errors;
 
       const message = errors
-        ? Object.values(errors).flat().join('\n')
-        : e.response?.data?.message ||
-          'ارسال مدرک پرداخت ناموفق بود.';
+        ? Object.values(errors).flat().join("\n")
+        : e.response?.data?.message || "ارسال مدرک پرداخت ناموفق بود.";
 
       alert(message);
     } finally {
@@ -488,25 +666,15 @@ function PaymentUpload({ order }) {
     return (
       <section className="payment-result-page">
         <div className="payment-success-card">
-
           <div className="payment-success-icon">
             <CheckCircle size={54} />
           </div>
 
-          <span className="eyebrow">
-            ارسال موفق
-          </span>
+          <span className="eyebrow">ارسال موفق</span>
 
-          <h2>
-            {isCheck
-              ? 'تصویر چک ارسال شد'
-              : 'فیش واریزی ارسال شد'}
-          </h2>
+          <h2>{isCheck ? "تصویر چک ارسال شد" : "فیش واریزی ارسال شد"}</h2>
 
-          <p>
-            مدرک پرداخت شما با موفقیت ثبت شد و در انتظار
-            بررسی مدیریت است.
-          </p>
+          <p>مدرک پرداخت شما با موفقیت ثبت شد و در انتظار بررسی مدیریت است.</p>
 
           <div className="payment-order-box">
             <span>شماره سفارش</span>
@@ -530,27 +698,15 @@ function PaymentUpload({ order }) {
   return (
     <section className="payment-page">
       <div className="payment-upload-card">
-
         <div className="payment-upload-header">
-
           <div className="payment-big-icon">
-            {isCheck ? (
-              <FileCheck2 size={34} />
-            ) : (
-              <Upload size={34} />
-            )}
+            {isCheck ? <FileCheck2 size={34} /> : <Upload size={34} />}
           </div>
 
           <div>
-            <span className="eyebrow">
-              مرحله پرداخت
-            </span>
+            <span className="eyebrow">مرحله پرداخت</span>
 
-            <h2>
-              {isCheck
-                ? 'ارسال تصویر چک'
-                : 'ارسال فیش واریزی'}
-            </h2>
+            <h2>{isCheck ? "ارسال تصویر چک" : "ارسال فیش واریزی"}</h2>
 
             <p>
               شماره سفارش:
@@ -560,44 +716,29 @@ function PaymentUpload({ order }) {
         </div>
 
         <div className="payment-upload-info">
-
           <div className="upload-info-item">
             <CheckCircle size={19} />
-            <span>
-              تصویر واضح و خوانا انتخاب کنید.
-            </span>
+            <span>تصویر واضح و خوانا انتخاب کنید.</span>
           </div>
 
           <div className="upload-info-item">
             <CheckCircle size={19} />
-            <span>
-              حداکثر حجم فایل ۵ مگابایت است.
-            </span>
+            <span>حداکثر حجم فایل ۵ مگابایت است.</span>
           </div>
 
           <div className="upload-info-item">
             <CheckCircle size={19} />
-            <span>
-              فرمت‌های تصویری مانند JPG و PNG قابل قبول هستند.
-            </span>
+            <span>فرمت‌های تصویری مانند JPG و PNG قابل قبول هستند.</span>
           </div>
-
         </div>
 
         <form onSubmit={send}>
-
-          <label
-            className={`upload-dropzone ${
-              file ? 'has-file' : ''
-            }`}
-          >
+          <label className={`upload-dropzone ${file ? "has-file" : ""}`}>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
               capture="environment"
-              onChange={(e) =>
-                setFile(e.target.files?.[0] || null)
-              }
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
               required
             />
 
@@ -607,19 +748,13 @@ function PaymentUpload({ order }) {
               <>
                 <strong>{file.name}</strong>
 
-                <span>
-                  فایل انتخاب شد. برای تغییر، کلیک کنید.
-                </span>
+                <span>فایل انتخاب شد. برای تغییر، کلیک کنید.</span>
               </>
             ) : (
               <>
-                <strong>
-                  انتخاب تصویر
-                </strong>
+                <strong>انتخاب تصویر</strong>
 
-                <span>
-                  تصویر را انتخاب کنید یا با دوربین عکس بگیرید.
-                </span>
+                <span>تصویر را انتخاب کنید یا با دوربین عکس بگیرید.</span>
               </>
             )}
           </label>
@@ -628,28 +763,20 @@ function PaymentUpload({ order }) {
             <div className="selected-file">
               <span>{file.name}</span>
 
-              <small>
-                {(file.size / 1024 / 1024).toFixed(2)} MB
-              </small>
+              <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
             </div>
           )}
 
-          <button
-            className="btn full payment-upload-btn"
-            disabled={loading}
-          >
+          <button className="btn full payment-upload-btn" disabled={loading}>
             {loading
-              ? 'در حال ارسال...'
+              ? "در حال ارسال..."
               : isCheck
-              ? 'ارسال تصویر چک'
-              : 'ارسال فیش برای تأیید'}
+                ? "ارسال تصویر چک"
+                : "ارسال فیش برای تأیید"}
           </button>
         </form>
 
-        <Link
-          className="payment-back-link"
-          to="/orders"
-        >
+        <Link className="payment-back-link" to="/orders">
           <ArrowRight size={17} />
           بازگشت به سفارش‌ها
         </Link>
@@ -657,7 +784,6 @@ function PaymentUpload({ order }) {
     </section>
   );
 }
-
 
 /* =========================================================
    ONLINE PAYMENT
@@ -686,9 +812,7 @@ function OnlinePayment({ order }) {
        * window.location.href = r.data.payment_url;
        */
 
-      alert(
-        'درگاه پرداخت آنلاین هنوز به سرویس واقعی متصل نشده است.'
-      );
+      alert("درگاه پرداخت آنلاین هنوز به سرویس واقعی متصل نشده است.");
     } finally {
       setLoading(false);
     }
@@ -697,22 +821,16 @@ function OnlinePayment({ order }) {
   return (
     <section className="payment-page">
       <div className="online-payment-card">
-
         <div className="online-payment-icon">
           <CreditCard size={42} />
         </div>
 
-        <span className="eyebrow">
-          پرداخت آنلاین
-        </span>
+        <span className="eyebrow">پرداخت آنلاین</span>
 
-        <h2>
-          آماده ورود به درگاه پرداخت
-        </h2>
+        <h2>آماده ورود به درگاه پرداخت</h2>
 
         <p>
-          سفارش شما با موفقیت ایجاد شده است.
-          برای پرداخت، وارد درگاه امن شوید.
+          سفارش شما با موفقیت ایجاد شده است. برای پرداخت، وارد درگاه امن شوید.
         </p>
 
         <div className="online-order-info">
@@ -727,20 +845,11 @@ function OnlinePayment({ order }) {
           </div>
         </div>
 
-        <button
-          className="btn full"
-          onClick={startPayment}
-          disabled={loading}
-        >
-          {loading
-            ? 'در حال اتصال...'
-            : 'ورود به درگاه پرداخت'}
+        <button className="btn full" onClick={startPayment} disabled={loading}>
+          {loading ? "در حال اتصال..." : "ورود به درگاه پرداخت"}
         </button>
 
-        <Link
-          className="payment-back-link"
-          to="/orders"
-        >
+        <Link className="payment-back-link" to="/orders">
           <ArrowRight size={17} />
           مشاهده سفارش
         </Link>
@@ -748,7 +857,6 @@ function OnlinePayment({ order }) {
     </section>
   );
 }
-
 
 /* =========================================================
    ORDERS
@@ -758,18 +866,14 @@ export function Orders() {
   const [o, setO] = useState([]);
 
   useEffect(() => {
-    api
-      .get('/orders')
-      .then((r) => setO(r.data.data || []));
+    api.get("/orders").then((r) => setO(r.data.data || []));
   }, []);
 
   return (
     <section className="wrap section">
       <div className="dashboard-head">
         <div>
-          <span className="eyebrow">
-            حساب کاربری
-          </span>
+          <span className="eyebrow">حساب کاربری</span>
 
           <h2>سفارش‌های من</h2>
         </div>
@@ -784,16 +888,13 @@ export function Orders() {
 
             <span>{x.status}</span>
 
-            <Link to={'/orders/' + x.id}>
-              جزئیات
-            </Link>
+            <Link to={"/orders/" + x.id}>جزئیات</Link>
           </div>
         ))}
       </div>
     </section>
   );
 }
-
 
 /* =========================================================
    ORDER DETAIL
@@ -803,16 +904,12 @@ export function OrderDetail({ id }) {
   const [o, setO] = useState(null);
 
   useEffect(() => {
-    api
-      .get('/orders/' + id)
-      .then((r) => setO(r.data));
+    api.get("/orders/" + id).then((r) => setO(r.data));
   }, [id]);
 
   return (
     <section className="wrap section">
-      <h2>
-        سفارش {o?.order_number}
-      </h2>
+      <h2>سفارش {o?.order_number}</h2>
 
       <div className="timeline">
         <span>ثبت سفارش</span>
@@ -827,32 +924,23 @@ export function OrderDetail({ id }) {
           <div className="tr" key={i.id}>
             <span>{i.product_name}</span>
 
-            <span>
-              {i.quantity} عدد
-            </span>
+            <span>{i.quantity} عدد</span>
 
-            <b>
-              {money(i.total)}
-            </b>
+            <b>{money(i.total)}</b>
           </div>
         ))}
 
         <hr />
 
-        <h3>
-          {money(o?.total)}
-        </h3>
+        <h3>{money(o?.total)}</h3>
 
         {o?.rejection_reason && (
-          <p className="error">
-            دلیل رد: {o.rejection_reason}
-          </p>
+          <p className="error">دلیل رد: {o.rejection_reason}</p>
         )}
       </div>
     </section>
   );
 }
-
 
 /* =========================================================
    DASHBOARD
@@ -863,39 +951,26 @@ export function Dashboard() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
-    api.get('/me').then((r) => setU(r.data));
+    api.get("/me").then((r) => setU(r.data));
 
-    api
-      .get('/orders')
-      .then((r) =>
-        setOrders(r.data.data || [])
-      );
+    api.get("/orders").then((r) => setOrders(r.data.data || []));
   }, []);
 
   return (
     <section className="wrap section">
-
       <div className="dashboard-head">
         <div>
-          <span className="eyebrow">
-            حساب کاربری
-          </span>
+          <span className="eyebrow">حساب کاربری</span>
 
-          <h2>
-            سلام {u?.name || 'کاربر'} 👋
-          </h2>
+          <h2>سلام {u?.name || "کاربر"} 👋</h2>
         </div>
 
-        <Link
-          className="btn"
-          to="/products"
-        >
+        <Link className="btn" to="/products">
           خرید جدید
         </Link>
       </div>
 
       <div className="stats">
-
         <div>
           <Package />
 
@@ -907,13 +982,7 @@ export function Dashboard() {
         <div>
           <Clock />
 
-          <b>
-            {
-              orders.filter((x) =>
-                x.status.includes('waiting')
-              ).length
-            }
-          </b>
+          <b>{orders.filter((x) => x.status.includes("waiting")).length}</b>
 
           <span>در انتظار</span>
         </div>
@@ -923,42 +992,27 @@ export function Dashboard() {
 
           <b>
             {
-              orders.filter((x) =>
-                ['shipped', 'delivered'].includes(
-                  x.status
-                )
-              ).length
+              orders.filter((x) => ["shipped", "delivered"].includes(x.status))
+                .length
             }
           </b>
 
           <span>ارسال شده</span>
         </div>
-
       </div>
 
       <h3>آخرین سفارش‌ها</h3>
 
       <div className="table">
         {orders.map((o) => (
-          <div
-            className="tr"
-            key={o.id}
-          >
+          <div className="tr" key={o.id}>
             <b>{o.order_number}</b>
 
-            <span>
-              {money(o.total)}
-            </span>
+            <span>{money(o.total)}</span>
 
-            <span>
-              {o.status}
-            </span>
+            <span>{o.status}</span>
 
-            <Link
-              to={'/orders/' + o.id}
-            >
-              جزئیات
-            </Link>
+            <Link to={"/orders/" + o.id}>جزئیات</Link>
           </div>
         ))}
       </div>

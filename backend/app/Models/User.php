@@ -65,4 +65,8 @@ class User extends Authenticatable
             default => 'کاربر عادی',
         };
     }
+    public function stockRequests()
+    {
+        return $this->hasMany(StockRequest::class);
+    }
 }

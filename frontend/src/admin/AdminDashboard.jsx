@@ -214,6 +214,14 @@ export default function AdminDashboard() {
 
   const [productsSearch, setProductsSearch] = useState("");
   const [productsFilter, setProductsFilter] = useState("");
+  // =========================
+  // Stock Requests
+  // =========================
+
+  const [stockRequests, setStockRequests] = useState([]);
+  const [stockRequestsLoading, setStockRequestsLoading] = useState(false);
+  const [showStockRequests, setShowStockRequests] = useState(false);
+  const [stockRequestsMeta, setStockRequestsMeta] = useState(null);
 
   // =========================================================
   // Load Dashboard
@@ -341,7 +349,31 @@ export default function AdminDashboard() {
       setProductsLoading(false);
     }
   }
+  // =========================================================
+  // Stock Requests
+  // =========================================================
 
+  async function loadStockRequests(page = 1) {
+    setStockRequestsLoading(true);
+
+    try {
+      const r = await api.get("/admin/stock-requests", {
+        params: {
+          page,
+        },
+      });
+
+      setStockRequests(r.data.data || []);
+      setStockRequestsMeta(r.data);
+      setShowStockRequests(true);
+    } catch (e) {
+      console.error(e);
+
+      alert(e.response?.data?.message || "خطا در دریافت درخواست‌های موجود شدن");
+    } finally {
+      setStockRequestsLoading(false);
+    }
+  }
   // =========================================================
   // Initial Load
   // =========================================================
@@ -440,16 +472,12 @@ export default function AdminDashboard() {
       value: d?.low_stock ?? 0,
     },
     {
-      key: "near_expiry",
-      label: "نزدیک انقضا",
-      value: d?.near_expiry ?? 0,
-    },
-    {
-      key: "expired",
-      label: "منقضی شده",
-      value: d?.expired ?? 0,
+      key: "stock_requests",
+      label: "درخواست موجود شدن",
+      value: d?.stock_requests ?? 0,
       clickable: true,
     },
+    
   ];
 
   return (
@@ -490,12 +518,9 @@ export default function AdminDashboard() {
                 loadProducts(1, "", productsSearch);
               }
 
-              if (x.key === "near_expiry") {
-                loadProducts(1, "near_expiry", "");
-              }
-
-              if (x.key === "expired") {
-                loadProducts(1, "expired", "");
+              
+              if (x.key === "stock_requests") {
+                loadStockRequests(1);
               }
             }}
           >
@@ -515,6 +540,19 @@ export default function AdminDashboard() {
                   }}
                 >
                   مشاهده کاربران
+                </button>
+              )}
+              {/* Stock Requests */}
+
+              {x.key === "stock_requests" && (
+                <button
+                  className="btn full admin-card-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadStockRequests(1);
+                  }}
+                >
+                  مشاهده درخواست‌ها
                 </button>
               )}
 
@@ -575,35 +613,8 @@ export default function AdminDashboard() {
                 </button>
               )}
 
-              {/* Near Expiry */}
 
-              {x.key === "near_expiry" && (
-                <button
-                  className="btn full admin-card-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-
-                    loadProducts(1, "near_expiry", "");
-                  }}
-                >
-                  مشاهده کالاهای نزدیک انقضا
-                </button>
-              )}
-
-              {/* Expired */}
-
-              {x.key === "expired" && (
-                <button
-                  className="btn full admin-card-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-
-                    loadProducts(1, "expired", "");
-                  }}
-                >
-                  مشاهده کالاهای منقضی‌شده
-                </button>
-              )}
+              
             </div>
           </div>
         ))}
@@ -1023,6 +1034,136 @@ export default function AdminDashboard() {
                   onPageChange={(newPage) =>
                     loadProducts(newPage, productsFilter, productsSearch)
                   }
+                />
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {/* ==================================================
+    STOCK REQUESTS
+================================================== */}
+
+      {showStockRequests && (
+        <div className="card admin-section-card">
+          <div className="card-body">
+            <div className="admin-section-header">
+              <div>
+                <h2 className="admin-section-title">
+                  🔔 درخواست‌های موجود شدن
+                </h2>
+
+                <p>محصولاتی که مشتریان درخواست موجود شدن آن‌ها را داده‌اند</p>
+              </div>
+
+              <button
+                className="btn"
+                onClick={() => setShowStockRequests(false)}
+              >
+                بستن
+              </button>
+            </div>
+
+            {stockRequestsLoading ? (
+              <p className="admin-status-message">
+                در حال دریافت درخواست‌ها...
+              </p>
+            ) : stockRequests.length === 0 ? (
+              <p className="admin-status-message">
+                درخواستی برای موجود شدن وجود ندارد.
+              </p>
+            ) : (
+              <>
+                <div className="table admin-table-scroll">
+                  <div className="tr admin-table-header admin-table-min-900">
+                    <span>محصول</span>
+                    <span>SKU</span>
+                    <span>موجودی</span>
+                    <span>تعداد درخواست</span>
+                    <span>مشتریان</span>
+                    <span>عملیات</span>
+                  </div>
+
+                  {stockRequests.map((item) => (
+                    <div key={item.id} className="tr admin-table-min-900">
+                      {/* Product */}
+                      <span>
+                        <b>{item.name || item.product?.name || "-"}</b>
+                      </span>
+
+                      {/* SKU */}
+                      <span>{item.sku || item.product?.sku || "-"}</span>
+
+                      {/* Stock */}
+                      <span>{item.stock ?? item.product?.stock ?? 0}</span>
+
+                      {/* Request count */}
+                      <span>
+                        {item.pending_stock_requests_count ??
+                          item.requests_count ??
+                          item.stock_requests_count ??
+                          0}
+                      </span>
+
+                      {/* Customers */}
+                      <span>
+                        {item.stockRequests?.length
+                          ? item.stockRequests
+                              .map(
+                                (request) =>
+                                  request.user?.name ||
+                                  request.user?.username ||
+                                  request.user?.email ||
+                                  "کاربر",
+                              )
+                              .join("، ")
+                          : "-"}
+                      </span>
+
+                      {/* Actions */}
+                      <span>
+                        <button
+                          className="btn"
+                          disabled={
+                            Number(item.stock ?? item.product?.stock ?? 0) <= 0
+                          }
+                          onClick={async () => {
+                            try {
+                              const productId =
+                                item.product_id || item.product?.id || item.id;
+
+                              await api.post(
+                                `/admin/stock-requests/product/${productId}/notify`,
+                              );
+
+                              alert(
+                                "درخواست‌ها با موفقیت اعلام موجود شدن شدند.",
+                              );
+
+                              await loadStockRequests(
+                                stockRequestsMeta?.current_page || 1,
+                              );
+                            } catch (e) {
+                              console.error(e);
+
+                              alert(
+                                e.response?.data?.message ||
+                                  "اعلام موجود شدن انجام نشد.",
+                              );
+                            }
+                          }}
+                        >
+                          اعلام موجود شدن
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <AdminPagination
+                  meta={stockRequestsMeta}
+                  loading={stockRequestsLoading}
+                  onPageChange={(newPage) => loadStockRequests(newPage)}
                 />
               </>
             )}
