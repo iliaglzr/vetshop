@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useCart } from '../context/CartContext';
 import { Link, useNavigate } from "react-router-dom";
 import {
   CheckCircle,
@@ -19,6 +18,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { api } from "../api";
+import { useCart } from '../context/CartContext';
 
 const paymentMethods = [
   {
@@ -48,12 +48,32 @@ const money = (n) =>
   new Intl.NumberFormat("fa-IR").format(Math.round(Number(n) || 0)) + " ریال";
 
 export function Cart() {
-    const { cart: c, loadCart, updateCart, removeFromCart } = useCart();
+  const { cart: c, loadCart, updateCart, removeFromCart } = useCart();
+
   const nav = useNavigate();
+
+  // آیدی ردیف‌هایی که الان درخواستشون در حال پردازشه
+  // (برای جلوگیری از چند کلیک پشت‌سرهم روی یک ردیف)
+  const [pendingIds, setPendingIds] = useState(new Set());
+
+  // پیام کوچیک خطا (به‌جای alert مرورگر)
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     loadCart();
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+
+    const timer = setTimeout(() => setToast(null), 3500);
+
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  function showError(message) {
+    setToast(message);
+  }
 
   if (!localStorage.getItem("token")) return <></>;
 
@@ -84,29 +104,72 @@ export function Cart() {
 
   const payable = afterDiscount + shipping + taxAmount;
 
-  async function increase(item) {
-    await api.patch("/cart/items/" + item.id, {
-      quantity: item.quantity + 1,
-    });
+  function lock(id) {
+    setPendingIds((prev) => new Set(prev).add(id));
+  }
 
-    load();
+  function unlock(id) {
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  async function increase(item) {
+    // تا وقتی درخواست قبلی همین ردیف تموم نشده، کلیک جدید رو نادیده می‌گیریم
+    if (pendingIds.has(item.id)) return;
+
+    lock(item.id);
+
+    try {
+      await updateCart(item.id, item.quantity + 1);
+    } catch (e) {
+      showError(
+        e.response?.data?.message ||
+          "افزایش تعداد ممکن نشد.",
+      );
+    } finally {
+      unlock(item.id);
+    }
   }
 
   async function decrease(item) {
-    if (item.quantity > (item.product.minimum_order_quantity || 1)) {
-      await api.patch("/cart/items/" + item.id, {
-        quantity: item.quantity - 1,
-      });
-    } else {
-      await api.delete("/cart/items/" + item.id);
-    }
+    if (pendingIds.has(item.id)) return;
 
-    load();
+    lock(item.id);
+
+    try {
+      if (item.quantity > (item.product.minimum_order_quantity || 1)) {
+        await updateCart(item.id, item.quantity - 1);
+      } else {
+        await removeFromCart(item.id);
+      }
+    } catch (e) {
+      showError(
+        e.response?.data?.message ||
+          "بروزرسانی تعداد ممکن نشد.",
+      );
+    } finally {
+      unlock(item.id);
+    }
   }
 
   async function removeItem(item) {
-    await api.delete("/cart/items/" + item.id);
-    load();
+    if (pendingIds.has(item.id)) return;
+
+    lock(item.id);
+
+    try {
+      await removeFromCart(item.id);
+    } catch (e) {
+      showError(
+        e.response?.data?.message ||
+          "حذف کالا ممکن نشد.",
+      );
+    } finally {
+      unlock(item.id);
+    }
   }
 
   return (
@@ -207,41 +270,31 @@ export function Cart() {
                     {/* تعداد */}
                     <div>
                       <div className="cart-qty">
-                        <button type="button" onClick={() => increase(item)}>
+                        <button
+                          type="button"
+                          onClick={() => increase(item)}
+                          disabled={pendingIds.has(item.id)}
+                        >
                           <Plus size={15} />
                         </button>
 
-                        <div className="cart-qty-info">
-                          <div className="cart-qty">
-                            <button
-                              type="button"
-                              onClick={() => increase(item)}
-                            >
-                              <Plus size={15} />
-                            </button>
+                        <strong>{quantity}</strong>
 
-                            <strong>{quantity}</strong>
-
-                            <button
-                              type="button"
-                              onClick={() => decrease(item)}
-                            >
-                              <Minus size={15} />
-                            </button>
-                          </div>
-
-                          {freeQuantity > 0 && (
-                            <div className="gift-info">
-                              <span>+ {freeQuantity} عدد رایگان</span>
-                              <small>مجموع دریافتی: {totalQuantity}</small>
-                            </div>
-                          )}
-                        </div>
-
-                        <button type="button" onClick={() => decrease(item)}>
+                        <button
+                          type="button"
+                          onClick={() => decrease(item)}
+                          disabled={pendingIds.has(item.id)}
+                        >
                           <Minus size={15} />
                         </button>
                       </div>
+
+                      {freeQuantity > 0 && (
+                        <div className="gift-info">
+                          <span>+ {freeQuantity} عدد رایگان</span>
+                          <small>مجموع دریافتی: {totalQuantity}</small>
+                        </div>
+                      )}
                     </div>
 
                     {/* واحد */}
@@ -273,6 +326,7 @@ export function Cart() {
                         type="button"
                         className="remove-cart-item"
                         onClick={() => removeItem(item)}
+                        disabled={pendingIds.has(item.id)}
                         title="حذف کالا"
                       >
                         <X size={18} />
@@ -350,6 +404,31 @@ export function Cart() {
             <textarea placeholder="شرایط پرداخت، زمان تحویل، شرایط نگهداری و حمل، توضیحات مربوط به کالاها و سایر موارد..." />
           </div>
         </>
+      )}
+
+      {/* پیام کوچیک خطا (جایگزین alert مرورگر) */}
+      {toast && (
+        <div
+          role="alert"
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#c0392b",
+            color: "#fff",
+            padding: "12px 22px",
+            borderRadius: 10,
+            boxShadow: "0 6px 18px rgba(0,0,0,0.28)",
+            zIndex: 9999,
+            fontSize: 14,
+            maxWidth: "92%",
+            textAlign: "center",
+            lineHeight: 1.8,
+          }}
+        >
+          {toast}
+        </div>
       )}
     </section>
   );

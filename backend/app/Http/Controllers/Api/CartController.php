@@ -94,7 +94,7 @@ class CartController extends Controller
         abort_if(
             $totalQuantity > $p->stock,
             422,
-            'موجودی کافی نیست.'
+            'موجودی انبار تمام شد.'
         );
     }
 
