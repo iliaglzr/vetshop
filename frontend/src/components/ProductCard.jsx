@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Package, Bell } from 'lucide-react';
 import { api } from '../api';
-
+import { useCart } from '../context/CartContext';
 
 const money = n =>
   new Intl.NumberFormat('fa-IR').format(Math.round(n || 0)) + ' تومان';
@@ -24,6 +24,7 @@ export default function ProductCard({ p }) {
   const [busy, setBusy] = useState(false);
   const [stockRequested, setStockRequested] = useState(false);
   const [stockRequestLoading, setStockRequestLoading] = useState(false);
+  const { addToCart } = useCart();
 
 
   // بررسی اینکه کاربر قبلاً برای این محصول درخواست موجود شدن داده یا نه
@@ -54,10 +55,7 @@ export default function ProductCard({ p }) {
     setBusy(true);
 
     try {
-      await api.post('/cart/items', {
-        product_id: p.id,
-        quantity: p.minimum_order_quantity || 1,
-      });
+      await addToCart(p.id, p.minimum_order_quantity || 1);
 
       alert('به سبد خرید اضافه شد');
     } catch (e) {

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { api } from '../api';
 import ProductCard from '../components/ProductCard';
+import { useCart } from '../context/CartContext';
 
 export default function Products() {
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useCart } from '../context/CartContext';
 import { Link, useNavigate } from "react-router-dom";
 import {
   CheckCircle,
@@ -47,16 +48,11 @@ const money = (n) =>
   new Intl.NumberFormat("fa-IR").format(Math.round(Number(n) || 0)) + " ریال";
 
 export function Cart() {
-  const [c, setC] = useState(null);
-
+    const { cart: c, loadCart, updateCart, removeFromCart } = useCart();
   const nav = useNavigate();
 
-  const load = () => {
-    api.get("/cart").then((r) => setC(r.data));
-  };
-
   useEffect(() => {
-    load();
+    loadCart();
   }, []);
 
   if (!localStorage.getItem("token")) return <></>;
