@@ -152,9 +152,12 @@ export default function ProductCard({ p }) {
         </div>
 
 
-        <div className="stock">
-          موجودی: {p.stock} | حداقل: {p.minimum_order_quantity}
-        </div>
+        {Number(p.stock) > 0 ? (
+          <span>موجود</span>
+        ) : (
+          <span>ناموجود</span>
+        )}
+        
 
 
         {isOutOfStock ? (
